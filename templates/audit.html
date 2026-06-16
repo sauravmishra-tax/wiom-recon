@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Audit Log · WIOM{% endblock %}
+{% block content %}
+<div class="page-head"><div><h2>Audit Log</h2>
+<div class="sub">Every remark, approval & change — who did what, when (IST)</div></div></div>
+
+<div class="card" style="padding:16px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:12px;align-items:end;">
+        <div><label>Action</label><select id="fAction" onchange="load()">
+            <option value="all">All actions</option><option value="remark">Remark</option>
+            <option value="approve">Approve</option><option value="resolve">Resolve</option>
+            <option value="reopen">Reopen</option></select></div>
+        <div><label>State</label><select id="fState" onchange="load()">
+            <option value="all">All states</option>
+            {% for s in states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div>
+        <div><label>Search GSTIN / vendor / user</label><input id="fSearch" placeholder="Type & Enter…"></div>
+        <div><label>&nbsp;</label><button class="btn" onclick="load()">Apply</button></div>
+    </div>
+</div>
+
+<div class="card" style="padding:0;overflow:auto;max-height:72vh;">
+    <table><thead><tr>
+        <th>When</th><th>User</th><th>Action</th><th>GSTIN / Vendor</th>
+        <th>State</th><th>Period</th><th>Change</th>
+    </tr></thead><tbody id="rows"><tr><td style="padding:22px;color:var(--gray)">Loading…</td></tr></tbody></table>
+</div>
+<p id="count" style="color:var(--gray);font-size:12px;margin-top:8px;"></p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const esc=t=>{const d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML;};
+document.getElementById('fSearch').addEventListener('keydown',e=>{if(e.key==='Enter')load();});
+function load(){
+    const q=new URLSearchParams({action:val('fAction'),state:val('fState'),q:val('fSearch')});
+    document.getElementById('rows').innerHTML='<tr><td style="padding:22px;color:var(--gray)">Loading…</td></tr>';
+    fetch('/api/audit?'+q).then(r=>r.json()).then(d=>{
+        document.getElementById('count').textContent=d.length+' entries'+(d.length>=1000?' (latest 1000)':'');
+        document.getElementById('rows').innerHTML=d.length?d.map(x=>`<tr>
+            <td style="white-space:nowrap;color:var(--gray-light)">${esc(x.at)}</td>
+            <td><b>${esc(x.user)}</b></td>
+            <td><span class="pill ${pillFor(x.action)}">${esc(x.action)}</span></td>
+            <td><b>${esc(x.gstin||'—')}</b><br><span style="font-size:11px;color:var(--gray-light)">${esc(x.vendor||'')}</span></td>
+            <td>${esc(x.state||'')}</td><td>${esc(x.period||'')}</td>
+            <td style="max-width:280px;font-size:11.5px;">${esc(x.new||'')}</td></tr>`).join(''):
+            '<tr><td colspan="7" style="padding:22px;color:var(--gray)">No audit entries yet.</td></tr>';
+    });
+}
+function pillFor(a){return a==='remark'?'remarked':(a==='reopen'?'open':'approved');}
+function val(id){return document.getElementById(id).value;}
+load();
+</script>
+{% endblock %}

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login · WIOM Recon</title>
+    <script>(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('wiom-theme')||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root{--pink:#D9008D;--pink-light:#FF1DA8;--bg1:#2a0020;--bg2:#0A0A0A;
+            --card:#141414;--field:#1d1d1d;--border:#2a2a2a;--text:#fff;--dim:#bbb;--red:#FF1744;}
+        [data-theme="light"]{--bg1:#ffe3f5;--bg2:#EFF1F5;--card:#fff;--field:#F4F6F9;
+            --border:#DEE2E9;--text:#181A20;--dim:#4B5563;--red:#D61F3A;}
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:'Inter',sans-serif;background:radial-gradient(circle at 30% 20%,var(--bg1),var(--bg2) 60%);
+            color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;transition:.2s;}
+        .box{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:40px;width:380px;
+            box-shadow:0 20px 60px rgba(0,0,0,.4);position:relative;}
+        .theme-btn{position:absolute;top:16px;right:16px;background:var(--field);border:1px solid var(--border);
+            color:var(--text);width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:15px;}
+        .logo-icon{height:48px;width:auto;display:block;margin:0 auto 16px;filter:drop-shadow(0 4px 16px rgba(224,17,157,.4));}
+        h1{font-size:22px;font-weight:800;text-align:center;}
+        p.sub{font-size:13px;color:var(--dim);text-align:center;margin:6px 0 26px;}
+        label{font-size:12px;color:var(--dim);font-weight:600;display:block;margin:14px 0 5px;}
+        input{background:var(--field);border:1px solid var(--border);color:var(--text);padding:12px;border-radius:9px;
+            font-size:14px;font-family:inherit;width:100%;}
+        input:focus{outline:none;border-color:var(--pink);}
+        button.submit{background:var(--pink);color:#fff;border:none;padding:13px;border-radius:9px;font-size:14px;
+            font-weight:700;cursor:pointer;width:100%;margin-top:22px;font-family:inherit;}
+        button.submit:hover{background:var(--pink-light);}
+        .err{background:rgba(255,23,68,.15);border:1px solid var(--red);color:var(--red);padding:10px;border-radius:8px;
+            font-size:13px;margin-top:14px;text-align:center;}
+    </style>
+</head>
+<body>
+    <form class="box" method="POST">
+        <button type="button" class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle light / dark">☀️</button>
+        <img src="{{ url_for('static', filename='wiom_logo.png') }}" class="logo-icon" alt="Wiom">
+        <h1>WIOM Recon</h1>
+        <p class="sub">Books vs GST Reconciliation Platform</p>
+        {% with msgs = get_flashed_messages(with_categories=true) %}
+            {% for cat, m in msgs %}<div class="err">{{ m }}</div>{% endfor %}
+        {% endwith %}
+        <label>Email</label>
+        <input type="email" name="email" required autofocus placeholder="you@wiom.in">
+        <label>Password</label>
+        <input type="password" name="password" required placeholder="••••••••">
+        <button type="submit" class="submit">Log In</button>
+    </form>
+    <script>
+        function toggleTheme(){var h=document.documentElement;var n=h.getAttribute('data-theme')==='light'?'dark':'light';
+            h.setAttribute('data-theme',n);try{localStorage.setItem('wiom-theme',n);}catch(e){}icon();}
+        function icon(){var b=document.getElementById('themeBtn');if(b)b.textContent=document.documentElement.getAttribute('data-theme')==='light'?'🌙':'☀️';}
+        icon();
+    </script>
+</body>
+</html>

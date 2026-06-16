@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}Detail & Remarks · WIOM{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div><h2 id="pageTitle">Detail &amp; Remarks</h2><div class="sub" id="pageSub">Report tabs · multi-select · remarks &amp; approvals</div></div>
+    <div style="display:flex;gap:10px;">
+        <a class="btn ghost" href="{{ url_for('import_remarks') }}">⬆ Import remarks</a>
+        <button class="btn" onclick="exportXl()">⬇ Cumulative Excel</button>
+    </div>
+</div>
+
+<div class="card" style="padding:16px;">
+    <div style="display:grid;grid-template-columns:repeat(6,1fr) auto;gap:12px;align-items:end;">
+        <div><label>Financial Year</label><select id="fFy" onchange="onFyChange()">
+            <option value="all">All FY</option>
+            {% for fy in fys %}<option value="{{ fy }}">FY {{ fy }}-{{ (fy+1)%100 }}</option>{% endfor %}</select></div>
+        <div><label>Period</label><select id="fPeriod" onchange="reloadAll()">
+            <option value="all">All months</option>
+            {% for p in periods %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></div>
+        <div><label>State</label><select id="fState" onchange="reloadAll()">
+            <option value="all">All states</option>
+            {% for s in states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div>
+        <div><label>Workflow status</label><select id="fStatus" onchange="load()">
+            <option value="all">All</option><option value="open">Open</option>
+            <option value="remarked">Remarked</option><option value="approved">Approved</option>
+            <option value="resolved">Resolved</option></select></div>
+        <div style="grid-column:span 2;"><label>Search GSTIN / vendor / invoice</label>
+            <input id="fSearch" placeholder="Type & Enter…"></div>
+        <div><label>&nbsp;</label><button class="btn" onclick="load()">Apply</button></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;font-weight:600;color:var(--gray-light);">
+        <input type="checkbox" id="fMy" style="width:auto;" onchange="reloadAll()"> ⭐ My Queue — only what's pending for me</label>
+</div>
+
+<div class="tabs" id="tabs"></div>
+
+<div class="card" style="padding:0;overflow:auto;max-height:68vh;">
+    <table id="tbl"><thead id="thead"></thead><tbody id="rows">
+        <tr><td style="padding:22px;color:var(--gray)">Loading…</td></tr></tbody></table>
+</div>
+<p id="count" style="color:var(--gray);font-size:12px;margin-top:8px;"></p>
+
+<!-- BULK BAR -->
+<div class="bulkbar" id="bulkbar">
+    <span class="selinfo"><span id="selN">0</span> selected</span>
+    <select id="bReason" style="width:230px;">
+        <option value="">— reason —</option>
+        <option>Vendor not filed GSTR-1</option><option>Timing difference (next month)</option>
+        <option>Invoice number mismatch</option><option>Tax head mismatch (IGST vs CGST+SGST)</option>
+        <option>Amount/rate difference</option><option>Duplicate / already booked</option>
+        <option>RCM / ineligible ITC</option><option>Wrong GSTIN</option>
+        <option>Under query with vendor</option><option>Other</option>
+    </select>
+    <input id="bRemark" placeholder="Bulk remark…" style="width:240px;">
+    <button class="btn sm" onclick="bulk('remark')">💬 Apply remark</button>
+    {% if is_admin %}
+    <button class="btn sm green" onclick="bulk('approve')">✓ Approve</button>
+    <button class="btn sm green" onclick="bulk('resolve')">✓✓ Resolve</button>
+    <button class="btn sm ghost" onclick="bulk('reopen')">↺ Reopen</button>
+    <span style="border-left:1px solid var(--dark3);padding-left:10px;display:flex;gap:6px;align-items:center;">
+        <select id="bAssignee" style="width:160px;"><option value="">— assign to —</option></select>
+        <button class="btn sm" onclick="bulk('assign')">👤 Assign</button></span>
+    {% endif %}
+    <button class="btn sm ghost" onclick="clearSel()">Clear</button>
+</div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal">
+  <div class="card" style="width:580px;max-height:88vh;overflow:auto;margin:0;">
+    <div style="display:flex;justify-content:space-between;align-items:start;">
+        <h2 id="mTitle">Row</h2>
+        <span onclick="closeModal()" style="cursor:pointer;color:var(--gray);font-size:24px;line-height:1;">×</span></div>
+    <div id="mInfo" style="font-size:12.5px;color:var(--gray-light);background:var(--dark2);padding:13px;
+        border-radius:11px;margin-bottom:14px;line-height:1.85;"></div>
+    <label>Reason</label>
+    <select id="mReason">
+        <option value="">— select —</option>
+        <option>Vendor not filed GSTR-1</option><option>Timing difference (next month)</option>
+        <option>Invoice number mismatch</option><option>Tax head mismatch (IGST vs CGST+SGST)</option>
+        <option>Amount/rate difference</option><option>Duplicate / already booked</option>
+        <option>RCM / ineligible ITC</option><option>Wrong GSTIN</option>
+        <option>Under query with vendor</option><option>Other</option>
+    </select>
+    <label style="margin-top:12px;">Remark / note</label>
+    <textarea id="mRemark" rows="3" placeholder="Explain the difference / action taken…"></textarea>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn sm" onclick="saveRemark()">💾 Save remark</button>
+        <button class="btn sm ghost" onclick="doFollowup()">📨 Mark follow-up sent</button>
+        {% if is_admin %}
+        <button class="btn sm green" onclick="single('approve')">✓ Approve</button>
+        <button class="btn sm green" onclick="single('resolve')">✓✓ Resolve</button>
+        <button class="btn sm ghost" onclick="single('reopen')">↺ Reopen</button>
+        {% endif %}
+        <button class="btn sm ghost" onclick="loadHistory()">🕓 History</button>
+    </div>
+    <div id="mFollow" style="margin-top:10px;font-size:12px;"></div>
+    <!-- comment thread -->
+    <div style="margin-top:16px;border-top:1px solid var(--dark3);padding-top:12px;">
+        <h3 style="font-size:13px;margin-bottom:8px;">💬 Discussion</h3>
+        <div id="mComments" style="font-size:12.5px;max-height:180px;overflow:auto;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;">
+            <input id="mCommentText" placeholder="Add a comment for the team…">
+            <button class="btn sm" onclick="postComment()">Send</button>
+        </div>
+    </div>
+    <div id="mHistory" style="margin-top:14px;"></div>
+  </div>
+</div>
+
+<!-- VENDOR DRILL-DOWN MODAL -->
+<div class="modal-bg" id="vmodal">
+  <div class="card" style="width:90%;max-width:1100px;max-height:88vh;overflow:auto;margin:0;">
+    <div style="display:flex;justify-content:space-between;align-items:start;">
+        <h2 id="vTitle">Vendor</h2>
+        <span onclick="document.getElementById('vmodal').classList.remove('show')" style="cursor:pointer;color:var(--gray);font-size:24px;line-height:1;">×</span></div>
+    <div id="vSummary" class="muted" style="margin-bottom:12px;"></div>
+    <div style="overflow:auto;"><table><thead><tr><th>Period</th><th>State</th><th>Category</th><th>Books Inv</th><th>2B Inv</th>
+        <th class="num">Books ₹</th><th class="num">2B ₹</th><th class="num">Diff ₹</th><th>Recon Status</th><th>Workflow</th></tr></thead>
+        <tbody id="vRows"></tbody></table></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const isAdmin = {{ 'true' if is_admin else 'false' }};
+const fmt=n=>(n==null?0:n).toLocaleString('en-IN',{maximumFractionDigits:0});
+const esc=t=>{const d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML;};
+
+// column helpers
+const C_GV   = {h:'GSTIN / Vendor', t:'gv'};
+const C_TEAM = {h:'Team Remark / Reason', t:'team'};
+const C_STAT = {h:'Status', t:'status'};
+const C_AGE  = {h:'Age', t:'age'};
+const C_FUP  = {h:'Follow-up', t:'fup'};
+const C_ASSIGN = {h:'Assigned', t:'asgn'};
+const TABS = {
+  cross:{label:'Expert Cross-Match', api:{category:'matched'}, sel:true, cols:[
+    {k:'txn_type',h:'Type'},{k:'books_inv',h:'Books Inv'},{k:'gstn_inv',h:'2B Inv'},{k:'inv_match',h:'Inv✓',t:'m'},
+    {k:'books_date',h:'Books Dt'},{k:'gstn_date',h:'2B Dt'},{k:'date_match',h:'Dt✓',t:'m'},
+    {k:'books_taxable',h:'Bk Taxable',t:'n'},{k:'gstn_taxable',h:'2B Taxable',t:'n'},{k:'taxable_diff',h:'Tax̲ Diff',t:'n'},
+    {k:'books_igst',h:'Bk IGST',t:'n'},{k:'gstn_igst',h:'2B IGST',t:'n'},
+    {k:'books_cgst',h:'Bk CGST',t:'n'},{k:'gstn_cgst',h:'2B CGST',t:'n'},
+    {k:'books_sgst',h:'Bk SGST',t:'n'},{k:'gstn_sgst',h:'2B SGST',t:'n'},
+    {k:'books_tax',h:'Bk Tax',t:'n'},{k:'gstn_tax',h:'2B Tax',t:'n'},{k:'tax_diff',h:'Tax Diff',t:'n'},
+    {k:'books_total',h:'Bk Total',t:'n'},{k:'gstn_total',h:'2B Total',t:'n'},{k:'total_diff',h:'Total Diff',t:'n'},
+    {k:'diff_pct',h:'Diff%',t:'p'},{k:'recon_status',h:'Recon Status',t:'sm'},C_TEAM,C_STAT]},
+  books:{label:'Books Only', api:{category:'books_only'}, sel:true, cols:[
+    {k:'books_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'books_date',h:'Date'},
+    {k:'books_taxable',h:'Taxable',t:'n'},{k:'books_igst',h:'IGST',t:'n'},{k:'books_cgst',h:'CGST',t:'n'},
+    {k:'books_sgst',h:'SGST',t:'n'},{k:'books_tax',h:'Total Tax',t:'n'},{k:'books_total',h:'Total Amt',t:'n'},
+    C_AGE,{k:'recon_status',h:'Cross Status',t:'sm'},C_TEAM,C_ASSIGN,C_FUP,C_STAT]},
+  gstn:{label:'GSTR-2B Only', api:{category:'gstn_only'}, sel:true, cols:[
+    {k:'gstn_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'gstn_date',h:'Date'},
+    {k:'gstn_taxable',h:'Taxable',t:'n'},{k:'gstn_igst',h:'IGST',t:'n'},{k:'gstn_cgst',h:'CGST',t:'n'},
+    {k:'gstn_sgst',h:'SGST',t:'n'},{k:'gstn_tax',h:'Total Tax',t:'n'},{k:'gstn_total',h:'Total Amt',t:'n'},
+    C_AGE,{k:'recon_status',h:'Cross Status',t:'sm'},C_TEAM,C_ASSIGN,C_FUP,C_STAT]},
+  fully:{label:'Fully Reconciled', api:{recon:'fully'}, sel:true, cols:[
+    {k:'books_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'books_date',h:'Date'},
+    {k:'books_taxable',h:'Taxable',t:'n'},{k:'books_igst',h:'IGST',t:'n'},{k:'books_cgst',h:'CGST',t:'n'},
+    {k:'books_sgst',h:'SGST',t:'n'},{k:'books_tax',h:'Total Tax',t:'n'},{k:'books_total',h:'Total Amt',t:'n'},
+    {k:'recon_status',h:'ITC Status',t:'sm'},C_TEAM,C_STAT]},
+  gap:{label:'GSTIN Gap Analysis', gap:true, sel:false, cols:[
+    {k:'b_cnt',h:'Bk #',t:'n'},{k:'b_taxable',h:'Bk Taxable',t:'n'},{k:'b_tax',h:'Bk Tax',t:'n'},{k:'b_total',h:'Bk Total',t:'n'},
+    {k:'g_cnt',h:'2B #',t:'n'},{k:'g_taxable',h:'2B Taxable',t:'n'},{k:'g_tax',h:'2B Tax',t:'n'},{k:'g_total',h:'2B Total',t:'n'},
+    {k:'taxable_gap',h:'Taxable Gap',t:'n'},{k:'tax_gap',h:'Tax Gap',t:'n'},{k:'total_gap',h:'Total Gap',t:'n'},
+    {k:'gap_pct',h:'Gap%',t:'p'},{k:'risk',h:'Risk',t:'risk'},{k:'remark',h:'Remark'},{k:'action',h:'Action'}]},
+};
+let activeTab='cross', rowsCache={}, sel=new Set(), cur=null;
+const ALL_PERIODS = {{ periods|tojson }};
+function fyOf(p){const y=+p.slice(0,4),m=+p.slice(5,7);return m>=4?y:y-1;}
+// When FY changes, show only that FY's months in Period and reset to All (prevents FY↔Period contradiction)
+function repopulatePeriods(){
+    const fy=v('fFy'), sel=document.getElementById('fPeriod');
+    const opts=['<option value="all">All months</option>'];
+    ALL_PERIODS.filter(p=>fy==='all'||fyOf(p)===+fy).forEach(p=>opts.push(`<option value="${p}">${p}</option>`));
+    sel.innerHTML=opts.join('');
+}
+function onFyChange(){repopulatePeriods();reloadAll();}
+const params=new URLSearchParams(location.search);
+if(params.get('period'))document.getElementById('fPeriod').value=params.get('period');
+if(params.get('my')==='1'){document.getElementById('fMy').checked=true;
+    document.getElementById('pageTitle').textContent='My Queue';
+    document.getElementById('pageSub').textContent='Only the rows pending for you';}
+document.getElementById('fSearch').addEventListener('keydown',e=>{if(e.key==='Enter')load();});
+
+// shared filter params (FY, period, state, my)
+function baseParams(){const p={fy:v('fFy'),period:v('fPeriod'),state:v('fState')};
+    if(document.getElementById('fMy').checked)p.my='1';return p;}
+
+function buildTabs(counts){
+    document.getElementById('tabs').innerHTML=Object.entries(TABS).map(([k,t])=>
+        `<div class="tab ${k===activeTab?'active':''}" onclick="switchTab('${k}')">${t.label}
+         <span class="cnt">${counts&&counts[k]!=null?counts[k]:'·'}</span></div>`).join('');
+}
+function switchTab(k){activeTab=k;clearSel();buildTabs(window._counts);load();}
+function reloadAll(){refreshCounts();load();}
+function refreshCounts(){
+    const q=new URLSearchParams(baseParams());
+    fetch('/api/counts?'+q).then(r=>r.json()).then(c=>{window._counts=c;buildTabs(c);});
+}
+
+function load(){
+    const tab=TABS[activeTab];
+    document.getElementById('rows').innerHTML='<tr><td style="padding:22px;color:var(--gray)">Loading…</td></tr>';
+    if(tab.gap){loadGap(tab);return;}
+    const q=new URLSearchParams({...baseParams(),status:v('fStatus'),q:v('fSearch'),...tab.api});
+    fetch('/api/rows?'+q).then(r=>r.json()).then(d=>{
+        rowsCache={};d.rows.forEach(r=>rowsCache[r.id]=r);
+        renderHead(tab,true);renderRows(tab,d.rows);
+        document.getElementById('count').textContent=d.count+' rows'+(d.count>=2000?' (first 2000 — narrow filters)':'');
+    });
+}
+function loadGap(tab){
+    const q=new URLSearchParams(baseParams());
+    fetch('/api/gap-analysis?'+q).then(r=>r.json()).then(d=>{
+        renderHead(tab,false);
+        const tb=document.getElementById('rows');
+        tb.innerHTML=d.rows.length?d.rows.map((r,i)=>'<tr>'+'<td class="num">'+(i+1)+'</td>'+gv(r)+
+            tab.cols.map(c=>cell(r,c)).join('')+'</tr>').join(''):empty(tab);
+        document.getElementById('count').textContent=d.count+' GSTINs';
+    });
+}
+function renderHead(tab,sel){
+    let h='<tr>';
+    if(sel)h+='<th style="width:34px;"><input type="checkbox" id="selAll" onclick="toggleAll(this)"></th>';
+    h+='<th>#</th><th>'+C_GV.h+'</th>';
+    h+=tab.cols.map(c=>`<th class="${['n','p'].includes(c.t)?'num':''}">${c.h}</th>`).join('');
+    if(sel)h+='<th></th>';
+    document.getElementById('thead').innerHTML=h+'</tr>';
+}
+function renderRows(tab,rows){
+    const tb=document.getElementById('rows');
+    if(!rows.length){tb.innerHTML=empty(tab);return;}
+    tb.innerHTML=rows.map((r,i)=>{
+        const cells=tab.cols.map(c=>cell(r,c)).join('');
+        return `<tr id="tr${r.id}" class="${sel.has(r.id)?'sel':''}">
+            <td><input type="checkbox" ${sel.has(r.id)?'checked':''} onclick="toggleRow(${r.id},this)"></td>
+            <td class="num">${i+1}</td>${gv(r)}${cells}
+            <td><button class="btn tiny ghost" onclick="openRow(${r.id})">Open</button></td></tr>`;
+    }).join('');
+}
+function gv(r){return `<td><b style="cursor:pointer;border-bottom:1px dashed var(--gray);" title="View all rows for this GSTIN" onclick="openVendor('${esc(r.gstin)}')">${esc(r.gstin||'—')}</b><br><span style="font-size:11px;color:var(--gray-light)">${esc(r.vendor||'')}</span></td>`;}
+function cell(r,c){
+    let val=r[c.k];
+    if(c.t==='n'){const cls=val<0?'num neg':'num';return `<td class="${cls}">${fmt(val)}</td>`;}
+    if(c.t==='p')return `<td class="num">${((val||0)*100).toFixed(1)}%</td>`;
+    if(c.t==='m'){const ok=val==='YES';return `<td><span class="pill ${ok?'approved':(val==='NO'?'remarked':'open')}">${val||'—'}</span></td>`;}
+    if(c.t==='sm')return `<td style="font-size:11px;color:var(--gray-light);max-width:170px;">${esc(val||'')}</td>`;
+    if(c.t==='risk')return `<td><span class="risk-${val}">${val||''}</span></td>`;
+    if(c.t==='status')return `<td><span class="pill ${val}">${val}</span></td>`;
+    if(c.t==='age'){const d=r.days_open||0;const col=d>=14?'var(--red)':(d>=7?'var(--orange)':'var(--gray-light)');
+        return `<td><span style="color:${col};font-weight:700;">${d>0?d+'d':'—'}</span></td>`;}
+    if(c.t==='fup'){if(r.followup_count>0)return `<td><span class="pill remarked" title="${esc(r.followup_note||'')}">📨 ${r.followup_count} · ${esc(r.followup_by||'')}<br>${esc(r.followup_at||'')}</span></td>`;return '<td><span style="color:var(--gray)">—</span></td>';}
+    if(c.t==='team'){const tr=r.team_remark?`${esc(r.team_remark)}<br><span style="font-size:10px;color:var(--blue)">${esc(r.team_reason||'')} · ${esc(r.remarked_by||'')}</span>`:'<span style="color:var(--gray)">—</span>';return `<td style="max-width:210px;">${tr}</td>`;}
+    if(c.t==='asgn')return r.assigned_to?`<td><span class="pill remarked">👤 ${esc(r.assigned_to)}</span></td>`:'<td><span style="color:var(--gray)">—</span></td>';
+    return `<td>${esc(val==null?'—':val)}</td>`;
+}
+function empty(tab){const span=(tab.sel?4:3)+tab.cols.length;return `<tr><td colspan="${span}" style="padding:22px;color:var(--gray)">No rows.</td></tr>`;}
+
+// selection
+function toggleRow(id,el){if(el.checked)sel.add(id);else sel.delete(id);document.getElementById('tr'+id)?.classList.toggle('sel',el.checked);updateBulk();}
+function toggleAll(el){document.querySelectorAll('#rows input[type=checkbox]').forEach(cb=>{const id=+cb.getAttribute('onclick').match(/\d+/)[0];cb.checked=el.checked;if(el.checked)sel.add(id);else sel.delete(id);document.getElementById('tr'+id)?.classList.toggle('sel',el.checked);});updateBulk();}
+function clearSel(){sel.clear();document.querySelectorAll('#rows input[type=checkbox]').forEach(cb=>cb.checked=false);document.querySelectorAll('#rows tr').forEach(tr=>tr.classList.remove('sel'));const sa=document.getElementById('selAll');if(sa)sa.checked=false;updateBulk();}
+function updateBulk(){document.getElementById('selN').textContent=sel.size;document.getElementById('bulkbar').classList.toggle('show',sel.size>0);}
+function bulk(action){
+    if(!sel.size)return;
+    const body={ids:[...sel],action};
+    if(action==='remark'){body.remark=v('bRemark');body.reason=v('bReason');if(!body.remark&&!body.reason){alert('Reason ya remark daalo.');return;}}
+    if(action==='assign'){body.assignee_id=v('bAssignee');}
+    if(action==='resolve')body.note=prompt('Resolution note (optional):')||'';
+    if((action!=='remark'&&action!=='assign')&&!confirm(`${sel.size} rows ko "${action}" karein?`))return;
+    fetch('/api/rows/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();document.getElementById('bRemark').value='';load();refreshCounts();}else alert(d.error||'Failed');});
+}
+
+// single-row modal
+function openRow(id){cur=rowsCache[id];const r=cur;
+    document.getElementById('mTitle').textContent=r.gstin+' · '+(r.vendor||'');
+    const f=n=>'₹'+fmt(n);
+    document.getElementById('mInfo').innerHTML=`<b>State:</b> ${esc(r.state_name)} | <b>Period:</b> ${r.period} | <b>Type:</b> ${esc(r.txn_type)}<br>
+        <b>Books Inv:</b> ${esc(r.books_inv||'—')} (${r.books_date||'—'}) | <b>2B Inv:</b> ${esc(r.gstn_inv||'—')} (${r.gstn_date||'—'})<br>
+        <b>Books:</b> ${f(r.books_total)} | <b>2B:</b> ${f(r.gstn_total)} | <b>Diff:</b> ${f(r.total_diff)}<br>
+        <b>System:</b> ${esc(r.recon_status||'')} — ${esc(r.system_remark||'')}${r.approved_by?`<br><b>Approved by:</b> ${esc(r.approved_by)} (${r.approved_at})`:''}`;
+    document.getElementById('mReason').value=r.team_reason||'';
+    document.getElementById('mRemark').value=r.team_remark||'';
+    document.getElementById('mHistory').innerHTML='';
+    document.getElementById('mComments').innerHTML='';
+    document.getElementById('mCommentText').value='';
+    renderFollow(r);
+    loadComments();
+    document.getElementById('modal').classList.add('show');}
+function renderFollow(r){
+    const el=document.getElementById('mFollow');
+    el.innerHTML=r.followup_count>0?`<span class="pill remarked">📨 Follow-up #${r.followup_count} by ${esc(r.followup_by)} · ${esc(r.followup_at)}</span> ${esc(r.followup_note||'')}`:'<span style="color:var(--gray)">No follow-up sent yet.</span>';
+}
+function closeModal(){document.getElementById('modal').classList.remove('show');cur=null;}
+function saveRemark(){fetch(`/api/row/${cur.id}/remark`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({remark:v('mRemark'),reason:v('mReason')})}).then(r=>r.json()).then(d=>{if(d.ok){closeModal();load();refreshCounts();}});}
+function single(action){const note=action==='resolve'?prompt('Resolution note (optional):')||'':'';
+    fetch(`/api/row/${cur.id}/approve`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action,note})}).then(r=>r.json()).then(d=>{if(d.ok){closeModal();load();refreshCounts();}});}
+function doFollowup(){
+    const note=prompt('Follow-up note (e.g. emailed vendor for GSTR-1):')||'';
+    // open a pre-filled mail draft for the team to actually send
+    const subj=encodeURIComponent(`GST follow-up: ${cur.gstin} ${cur.books_inv||cur.gstn_inv||''}`);
+    const body=encodeURIComponent(`Dear ${cur.vendor||'Vendor'},\n\nRegarding GSTIN ${cur.gstin}, invoice ${cur.books_inv||cur.gstn_inv||''} (₹${fmt(cur.books_total||cur.gstn_total)}) — it is not reflecting correctly in GSTR-2B. Request you to file/amend your GSTR-1.\n\nRegards,\nWIOM Accounts`);
+    window.open(`mailto:?subject=${subj}&body=${body}`,'_blank');
+    fetch(`/api/row/${cur.id}/followup`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({note})}).then(r=>r.json()).then(d=>{if(d.ok){cur=d.row;rowsCache[cur.id]=d.row;renderFollow(d.row);load();}});
+}
+function loadComments(){fetch(`/api/row/${cur.id}/comments`).then(r=>r.json()).then(cs=>{
+    document.getElementById('mComments').innerHTML=cs.length?cs.map(c=>`<div style="margin-bottom:8px;padding:8px 10px;background:var(--dark2);border-radius:8px;">
+        <b style="color:var(--pink-light)">${esc(c.user)}</b> <span style="font-size:10px;color:var(--gray)">${esc(c.role)} · ${esc(c.at)}</span><br>${esc(c.text)}</div>`).join(''):'<span style="color:var(--gray)">No comments yet.</span>';});}
+function postComment(){const t=v('mCommentText').trim();if(!t)return;
+    fetch(`/api/row/${cur.id}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})})
+        .then(r=>r.json()).then(()=>{document.getElementById('mCommentText').value='';loadComments();});}
+function loadHistory(){fetch(`/api/row/${cur.id}/history`).then(r=>r.json()).then(h=>{
+    document.getElementById('mHistory').innerHTML='<div style="border-top:1px solid var(--dark3);padding-top:10px;font-size:12px;">'+
+        (h.length?h.map(x=>`<div style="margin-bottom:6px;"><b style="color:var(--pink-light)">${esc(x.user)}</b> · ${x.action} <span style="color:var(--gray)">${x.at}</span>${x.new?` → <i>${esc(x.new)}</i>`:''}</div>`).join(''):'<span style="color:var(--gray)">No history.</span>')+'</div>';});}
+// vendor drill-down — all rows for a GSTIN across states/months
+function openVendor(gstin){
+    fetch(`/api/vendor-rows/${encodeURIComponent(gstin)}`).then(r=>r.json()).then(d=>{
+        document.getElementById('vTitle').textContent=gstin+' · '+(d.vendor||'');
+        let bk=0,tb=0;d.rows.forEach(r=>{bk+=r.books_total||0;tb+=r.gstn_total||0;});
+        document.getElementById('vSummary').innerHTML=`${d.count} rows across all states/months · Books ₹${fmt(bk)} vs 2B ₹${fmt(tb)} · Gap ₹${fmt(bk-tb)}`;
+        document.getElementById('vRows').innerHTML=d.rows.map(r=>`<tr>
+            <td>${esc(r.period)}</td><td>${esc(r.state_name)}</td><td>${esc(r.category)}</td>
+            <td>${esc(r.books_inv||'—')}</td><td>${esc(r.gstn_inv||'—')}</td>
+            <td class="num">${fmt(r.books_total)}</td><td class="num">${fmt(r.gstn_total)}</td>
+            <td class="num ${r.total_diff<0?'neg':''}">${fmt(r.total_diff)}</td>
+            <td style="font-size:11px;color:var(--gray-light)">${esc(r.recon_status||'')}</td>
+            <td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('')||'<tr><td colspan="10" style="padding:18px;color:var(--gray)">No rows.</td></tr>';
+        document.getElementById('vmodal').classList.add('show');
+    });
+}
+function v(id){return document.getElementById(id).value;}
+function exportXl(){const q=new URLSearchParams(baseParams());window.location='/export?'+q;}
+// load assignable Book-Keeping users into the bulk "Assign to" dropdown
+(function(){const sel=document.getElementById('bAssignee');if(!sel)return;
+    fetch('/api/assignees').then(r=>r.json()).then(us=>{
+        sel.innerHTML='<option value="">— assign to —</option><option value="">(unassign)</option>'+
+            us.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');});})();
+
+buildTabs(null);refreshCounts();load();
+</script>
+{% endblock %}

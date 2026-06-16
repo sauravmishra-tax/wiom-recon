@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WIOM | Zoho Books vs GST Recon</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --pink: #D9008D;
+            --pink-light: #FF1DA8;
+            --pink-dark: #A3006B;
+            --black: #0A0A0A;
+            --dark: #1A1A1A;
+            --dark2: #252525;
+            --dark3: #333333;
+            --white: #FFFFFF;
+            --gray: #888888;
+            --gray-light: #CCCCCC;
+            --green: #00C853;
+            --red: #FF1744;
+            --yellow: #FFD600;
+            --blue: #2979FF;
+        }
+
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--black);
+            color: var(--white);
+            min-height: 100vh;
+        }
+
+        /* HEADER */
+        .header {
+            background: linear-gradient(135deg, var(--black) 0%, var(--dark) 50%, var(--pink-dark) 100%);
+            border-bottom: 3px solid var(--pink);
+            padding: 20px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .logo-icon {
+            width: 50px; height: 50px;
+            background: var(--pink);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; font-weight: 900; color: white;
+            box-shadow: 0 0 20px rgba(217,0,141,0.5);
+        }
+        .logo-text h1 {
+            font-size: 24px; font-weight: 800;
+            background: linear-gradient(90deg, var(--white), var(--pink-light));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .logo-text p {
+            font-size: 12px; color: var(--gray); font-weight: 400;
+            letter-spacing: 1px;
+        }
+        .header-badge {
+            background: var(--dark2);
+            border: 1px solid var(--pink);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 11px;
+            color: var(--pink-light);
+            font-weight: 600;
+        }
+
+        /* MAIN CONTENT */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 40px;
+        }
+
+        /* UPLOAD SECTION */
+        .upload-section {
+            background: var(--dark);
+            border: 2px dashed var(--dark3);
+            border-radius: 16px;
+            padding: 50px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        .upload-section:hover, .upload-section.dragover {
+            border-color: var(--pink);
+            background: rgba(217,0,141,0.05);
+            box-shadow: 0 0 30px rgba(217,0,141,0.1);
+        }
+        .upload-section.processing {
+            border-color: var(--pink);
+            cursor: default;
+        }
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        .upload-section h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .upload-section p {
+            color: var(--gray);
+            font-size: 14px;
+        }
+        .upload-section input[type=file] {
+            position: absolute;
+            width: 100%; height: 100%;
+            top: 0; left: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .file-info {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: var(--dark2);
+            border-radius: 8px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+        .file-info.show { display: inline-flex; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 28px;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-pink {
+            background: var(--pink);
+            color: white;
+            box-shadow: 0 4px 15px rgba(217,0,141,0.3);
+        }
+        .btn-pink:hover {
+            background: var(--pink-light);
+            box-shadow: 0 6px 25px rgba(217,0,141,0.5);
+            transform: translateY(-1px);
+        }
+        .btn-pink:disabled {
+            background: var(--dark3);
+            color: var(--gray);
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-outline {
+            background: transparent;
+            color: var(--pink);
+            border: 2px solid var(--pink);
+        }
+        .btn-outline:hover {
+            background: var(--pink);
+            color: white;
+        }
+        .btn-download {
+            background: var(--green);
+            color: white;
+            font-size: 16px;
+            padding: 14px 32px;
+        }
+        .btn-download:hover {
+            box-shadow: 0 6px 25px rgba(0,200,83,0.4);
+        }
+
+        /* PROGRESS BAR */
+        .progress-section {
+            display: none;
+            margin-top: 30px;
+        }
+        .progress-section.show { display: block; }
+
+        .progress-bar-container {
+            background: var(--dark2);
+            border-radius: 10px;
+            height: 14px;
+            overflow: hidden;
+            margin: 15px 0;
+            border: 1px solid var(--dark3);
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--pink-dark), var(--pink), var(--pink-light));
+            border-radius: 10px;
+            transition: width 0.5s ease;
+            width: 0%;
+            position: relative;
+        }
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: var(--gray-light);
+        }
+        .progress-pct {
+            color: var(--pink-light);
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        /* AGENT CARDS */
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-top: 25px;
+        }
+        .agent-card {
+            background: var(--dark);
+            border: 1px solid var(--dark3);
+            border-radius: 12px;
+            padding: 18px;
+            transition: all 0.3s;
+        }
+        .agent-card.active {
+            border-color: var(--pink);
+            box-shadow: 0 0 20px rgba(217,0,141,0.15);
+        }
+        .agent-card.done {
+            border-color: var(--green);
+        }
+        .agent-card.error {
+            border-color: var(--red);
+        }
+        .agent-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .agent-num {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 14px;
+            background: var(--dark2);
+            color: var(--gray);
+            border: 1px solid var(--dark3);
+            transition: all 0.3s;
+        }
+        .agent-card.active .agent-num {
+            background: var(--pink);
+            color: white;
+            border-color: var(--pink);
+            animation: pulse 1.5s infinite;
+        }
+        .agent-card.done .agent-num {
+            background: var(--green);
+            color: white;
+            border-color: var(--green);
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(217,0,141,0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(217,0,141,0); }
+        }
+        .agent-name {
+            font-weight: 600;
+            font-size: 13px;
+        }
+        .agent-status {
+            font-size: 11px;
+            color: var(--gray);
+            margin-top: 6px;
+        }
+        .agent-checks {
+            margin-top: 8px;
+        }
+        .check-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            padding: 3px 0;
+            color: var(--gray-light);
+        }
+        .check-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .check-dot.pass { background: var(--green); }
+        .check-dot.warn { background: var(--yellow); }
+        .check-dot.fail { background: var(--red); }
+
+        /* LOG CONSOLE */
+        .log-section {
+            margin-top: 25px;
+            display: none;
+        }
+        .log-section.show { display: block; }
+
+        .log-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .log-header h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-light);
+        }
+        .log-console {
+            background: #0D0D0D;
+            border: 1px solid var(--dark3);
+            border-radius: 10px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 12px;
+        }
+        .log-line {
+            padding: 3px 0;
+            display: flex;
+            gap: 10px;
+        }
+        .log-time { color: var(--gray); min-width: 65px; }
+        .log-agent {
+            min-width: 120px;
+            font-weight: 600;
+        }
+        .log-agent[data-id="0"] { color: var(--pink-light); }
+        .log-agent[data-id="1"] { color: #FF6B6B; }
+        .log-agent[data-id="2"] { color: #4ECDC4; }
+        .log-agent[data-id="3"] { color: #45B7D1; }
+        .log-agent[data-id="4"] { color: #FFA07A; }
+        .log-agent[data-id="5"] { color: #98D8C8; }
+        .log-agent[data-id="6"] { color: #C3B1E1; }
+        .log-agent[data-id="7"] { color: #FF9F43; }
+        .log-agent[data-id="8"] { color: #E056A0; }
+        .log-agent[data-id="9"] { color: #FF4500; }
+        .log-msg { color: var(--gray-light); word-break: break-all; }
+
+        /* RESULTS */
+        .results-section {
+            display: none;
+            margin-top: 30px;
+        }
+        .results-section.show { display: block; }
+
+        .result-card {
+            background: var(--dark);
+            border: 2px solid var(--green);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+        }
+        .result-card h2 {
+            font-size: 24px;
+            margin-bottom: 5px;
+            color: var(--green);
+        }
+        .result-card p {
+            color: var(--gray-light);
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .stat-box {
+            background: var(--dark2);
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--pink-light);
+        }
+        .stat-label {
+            font-size: 11px;
+            color: var(--gray);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* FOOTER */
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: var(--dark3);
+            font-size: 12px;
+            margin-top: 40px;
+        }
+        .footer span { color: var(--pink); }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--dark); }
+        ::-webkit-scrollbar-thumb { background: var(--dark3); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--pink); }
+
+        /* RESPONSIVE */
+        @media (max-width: 768px) {
+            .agents-grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .container { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            <div class="logo-icon">W</div>
+            <div class="logo-text">
+                <h1>WIOM</h1>
+                <p>ZOHO BOOKS vs GST RECONCILIATION</p>
+            </div>
+        </div>
+        <div class="header-badge">⚡ 9 AI Sub-Agents • VLOOKUP • SUMIFS • Inter-Recon Verified</div>
+    </div>
+
+    <div class="container">
+        <!-- UPLOAD -->
+        <div class="upload-section" id="uploadZone">
+            <div class="upload-icon">📊</div>
+            <h2>Upload Zoho Books GST Reconciliation Excel</h2>
+            <p>Drop your .xlsx file here or click to browse</p>
+            <p style="color:var(--pink); margin-top:8px; font-size:12px;">Required sheets: Reconciled, Not found in GSTN, Not found in Zoho Books, Partially Matched</p>
+            <input type="file" id="fileInput" accept=".xlsx,.xls">
+            <div class="file-info" id="fileInfo">
+                <span>📁</span>
+                <span id="fileName"></span>
+            </div>
+        </div>
+
+        <div style="text-align:center; margin-top:20px;">
+            <button class="btn btn-pink" id="startBtn" disabled onclick="startProcessing()">
+                🚀 Run WIOM Reconciliation Engine
+            </button>
+        </div>
+
+        <!-- PROGRESS -->
+        <div class="progress-section" id="progressSection">
+            <div class="progress-label">
+                <span id="currentAgent">Initializing...</span>
+                <span class="progress-pct" id="progressPct">0%</span>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+
+            <div class="agents-grid" id="agentsGrid">
+                <div class="agent-card" id="agent1">
+                    <div class="agent-header">
+                        <div class="agent-num">1</div>
+                        <div class="agent-name">Data Validator</div>
+                    </div>
+                    <div class="agent-status">Validates sheets, columns, data quality</div>
+                    <div class="agent-checks" id="checks1"></div>
+                </div>
+                <div class="agent-card" id="agent2">
+                    <div class="agent-header">
+                        <div class="agent-num">2</div>
+                        <div class="agent-name">Vendor Resolver</div>
+                    </div>
+                    <div class="agent-status">Maps vendor names + fixes credit signs</div>
+                    <div class="agent-checks" id="checks2"></div>
+                </div>
+                <div class="agent-card" id="agent3">
+                    <div class="agent-header">
+                        <div class="agent-num">3</div>
+                        <div class="agent-name">Cross-Match Engine</div>
+                    </div>
+                    <div class="agent-status">3-pass matching: Exact → Amount → Taxable</div>
+                    <div class="agent-checks" id="checks3"></div>
+                </div>
+                <div class="agent-card" id="agent4">
+                    <div class="agent-header">
+                        <div class="agent-num">4</div>
+                        <div class="agent-name">ITC Risk Analyzer</div>
+                    </div>
+                    <div class="agent-status">ITC impact, risk levels, net gap</div>
+                    <div class="agent-checks" id="checks4"></div>
+                </div>
+                <div class="agent-card" id="agent5">
+                    <div class="agent-header">
+                        <div class="agent-num">5</div>
+                        <div class="agent-name">Anomaly Detector</div>
+                    </div>
+                    <div class="agent-status">Patterns, duplicates, suspicious amounts</div>
+                    <div class="agent-checks" id="checks5"></div>
+                </div>
+                <div class="agent-card" id="agent6">
+                    <div class="agent-header">
+                        <div class="agent-num">6</div>
+                        <div class="agent-name">Report Builder</div>
+                    </div>
+                    <div class="agent-status">Excel with VLOOKUP/SUMIFS/INDEX-MATCH</div>
+                    <div class="agent-checks" id="checks6"></div>
+                </div>
+                <div class="agent-card" id="agent7">
+                    <div class="agent-header">
+                        <div class="agent-num">7</div>
+                        <div class="agent-name">Schema Guard</div>
+                    </div>
+                    <div class="agent-status">Validates column layout & formula refs</div>
+                    <div class="agent-checks" id="checks7"></div>
+                </div>
+                <div class="agent-card" id="agent8">
+                    <div class="agent-header">
+                        <div class="agent-num">8</div>
+                        <div class="agent-name">QA Reviewer</div>
+                    </div>
+                    <div class="agent-status">Cross-verifies all agents' outputs</div>
+                    <div class="agent-checks" id="checks8"></div>
+                </div>
+                <div class="agent-card" id="agent9">
+                    <div class="agent-header">
+                        <div class="agent-num">9</div>
+                        <div class="agent-name">Scrutiny & Inter-Recon</div>
+                    </div>
+                    <div class="agent-status">Post-output cross-sheet verification</div>
+                    <div class="agent-checks" id="checks9"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LOG CONSOLE -->
+        <div class="log-section" id="logSection">
+            <div class="log-header">
+                <h3>🖥️ Agent Console</h3>
+                <span id="elapsed" style="color:var(--gray); font-size:12px;"></span>
+            </div>
+            <div class="log-console" id="logConsole"></div>
+        </div>
+
+        <!-- RESULTS -->
+        <div class="results-section" id="resultsSection">
+            <div class="result-card">
+                <h2>✅ Reconciliation Complete!</h2>
+                <p id="resultSummary"></p>
+                <button class="btn btn-download" onclick="downloadResult()">
+                    ⬇️ Download Expert Recon Excel
+                </button>
+            </div>
+
+            <div class="stats-grid" id="statsGrid"></div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>WIOM Zoho Books vs GST Recon • Powered by <span>9 AI Sub-Agents</span> • Built with ❤️</p>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        let pollInterval = null;
+        const agentKeyMap = {
+            1: 'validator', 2: 'vendor_resolver', 3: 'cross_matcher',
+            4: 'itc_analyzer', 5: 'anomaly_detector', 6: 'report_builder',
+            7: 'schema_guard', 8: 'qa_reviewer', 9: 'scrutiny'
+        };
+
+        // File selection
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                selectedFile = e.target.files[0];
+                document.getElementById('fileName').textContent = selectedFile.name + ' (' + (selectedFile.size/1024/1024).toFixed(1) + ' MB)';
+                document.getElementById('fileInfo').classList.add('show');
+                document.getElementById('startBtn').disabled = false;
+            }
+        });
+
+        // Drag & drop
+        const uploadZone = document.getElementById('uploadZone');
+        uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                selectedFile = e.dataTransfer.files[0];
+                document.getElementById('fileName').textContent = selectedFile.name;
+                document.getElementById('fileInfo').classList.add('show');
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('fileInput').files = e.dataTransfer.files;
+            }
+        });
+
+        function startProcessing() {
+            if (!selectedFile) return;
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('progressSection').classList.add('show');
+            document.getElementById('logSection').classList.add('show');
+            document.getElementById('resultsSection').classList.remove('show');
+
+            fetch('/upload', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        document.getElementById('startBtn').disabled = false;
+                        return;
+                    }
+                    pollInterval = setInterval(pollStatus, 800);
+                })
+                .catch(err => {
+                    alert('Upload failed: ' + err);
+                    document.getElementById('startBtn').disabled = false;
+                });
+        }
+
+        function pollStatus() {
+            fetch('/status')
+                .then(r => r.json())
+                .then(data => {
+                    // Progress
+                    document.getElementById('progressBar').style.width = data.progress + '%';
+                    document.getElementById('progressPct').textContent = data.progress + '%';
+                    document.getElementById('currentAgent').textContent = data.current_agent || 'Initializing...';
+                    document.getElementById('elapsed').textContent = data.elapsed ? data.elapsed + 's' : '';
+
+                    // Agent cards
+                    updateAgentCards(data);
+
+                    // Logs
+                    updateLogs(data.logs);
+
+                    // Done?
+                    if (!data.active && data.progress > 0) {
+                        clearInterval(pollInterval);
+                        if (data.output_file && !data.error) {
+                            showResults(data);
+                        } else if (data.error) {
+                            document.getElementById('currentAgent').textContent = '❌ Error: ' + data.error;
+                            document.getElementById('startBtn').disabled = false;
+                        }
+                    }
+                });
+        }
+
+        function updateAgentCards(data) {
+            const progress = data.progress;
+            const agentThresholds = [15, 35, 55, 70, 85, 90, 95, 98, 100];
+
+            for (let i = 1; i <= 9; i++) {
+                const card = document.getElementById('agent' + i);
+                const key = agentKeyMap[i];
+                const result = data.agent_results[key];
+
+                card.classList.remove('active', 'done', 'error');
+
+                if (result) {
+                    card.classList.add(result.status === 'passed' ? 'done' : 'error');
+                    // Show checks
+                    const checksDiv = document.getElementById('checks' + i);
+                    if (result.checks) {
+                        checksDiv.innerHTML = result.checks.slice(0, 5).map(c =>
+                            `<div class="check-item"><div class="check-dot ${c.status.toLowerCase()}"></div>${c.name}: ${c.detail}</div>`
+                        ).join('');
+                    }
+                } else if (progress >= agentThresholds[i-2] && progress < agentThresholds[i-1]) {
+                    card.classList.add('active');
+                }
+            }
+        }
+
+        function updateLogs(logs) {
+            const console_el = document.getElementById('logConsole');
+            console_el.innerHTML = logs.map(l =>
+                `<div class="log-line"><span class="log-time">${l.time}</span><span class="log-agent" data-id="${l.agent_id}">[${l.agent}]</span><span class="log-msg">${l.msg}</span></div>`
+            ).join('');
+            console_el.scrollTop = console_el.scrollHeight;
+        }
+
+        function showResults(data) {
+            document.getElementById('resultsSection').classList.add('show');
+            document.getElementById('currentAgent').textContent = '✅ All 9 Agents Complete!';
+
+            const r3 = data.agent_results.cross_matcher;
+            const r4 = data.agent_results.itc_analyzer;
+            const r5 = data.agent_results.anomaly_detector;
+            const r1 = data.agent_results.validator;
+            const r7 = data.agent_results.schema_guard;
+            const r8 = data.agent_results.qa_reviewer;
+            const r9 = data.agent_results.scrutiny;
+
+            const qaVerdict = r8?.stats?.verdict || 'N/A';
+            const scrutinyVerdict = r9?.stats?.verdict || 'N/A';
+            document.getElementById('resultSummary').textContent =
+                `Processed ${r1?.stats?.total_invoices || 0} invoices in ${data.elapsed}s • ${r3?.stats?.total_matched || 0} expert matches recovered • QA: ${qaVerdict} • Scrutiny: ${scrutinyVerdict}`;
+
+            const statsHTML = [
+                { value: r1?.stats?.reconciled_count || 0, label: 'Auto Reconciled' },
+                { value: r3?.stats?.total_matched || 0, label: 'Expert Matched' },
+                { value: r3?.stats?.books_unmatched || 0, label: 'Books Only (Risk)' },
+                { value: r3?.stats?.gstn_unmatched || 0, label: 'GSTR-2B Only' },
+                { value: '₹' + ((r4?.stats?.at_risk || 0)/100000).toFixed(1) + 'L', label: 'ITC at Risk' },
+                { value: '₹' + ((r4?.stats?.excess || 0)/100000).toFixed(1) + 'L', label: 'Excess ITC' },
+                { value: r5?.stats?.total_anomalies || 0, label: 'Anomalies Found' },
+                { value: qaVerdict, label: 'QA Verdict' },
+                { value: scrutinyVerdict, label: 'Scrutiny Verdict' },
+            ].map(s => `<div class="stat-box"><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>`).join('');
+
+            document.getElementById('statsGrid').innerHTML = statsHTML;
+            document.getElementById('startBtn').disabled = false;
+        }
+
+        function downloadResult() {
+            window.location.href = '/download';
+        }
+    </script>
+</body>
+</html>

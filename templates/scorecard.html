@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Vendor Scorecard · WIOM{% endblock %}
+{% block content %}
+<div class="page-head"><div><h2>Vendor Compliance Scorecard</h2>
+<div class="sub">Which vendors reliably file GSTR-1 — worst offenders first</div></div></div>
+
+<div class="card" style="padding:14px 16px;">
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12px;align-items:center;">
+        <b style="font-size:12px;">Grade = % of this vendor's invoices that appeared in GSTR-2B (reliability):</b>
+        <span><span class="badge" style="background:var(--green)">A</span> 90–100% — fully compliant</span>
+        <span><span class="badge" style="background:var(--blue)">B</span> 75–89% — mostly files</span>
+        <span><span class="badge" style="background:var(--orange)">C</span> 50–74% — frequent gaps</span>
+        <span><span class="badge" style="background:var(--red)">D</span> below 50% — chronic defaulter, ITC at risk</span>
+    </div>
+</div>
+
+<div class="card" style="padding:16px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:12px;align-items:end;">
+        <div><label>State</label><select id="fState" onchange="load()">
+            <option value="all">All states</option>
+            {% for s in states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div>
+        <div><label>Grade</label><select id="fGrade" onchange="render()">
+            <option value="all">All grades</option><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+        <div><label>Search GSTIN / vendor</label><input id="fSearch" placeholder="Type & Enter…"></div>
+        <div><label>&nbsp;</label><button class="btn" onclick="load()">Apply</button></div>
+    </div>
+</div>
+
+<div class="card" style="padding:0;overflow:auto;max-height:72vh;">
+    <table><thead><tr>
+        <th>GSTIN / Vendor</th><th class="num">Months</th><th class="num">Matched</th>
+        <th class="num">Not filed (Books-only)</th><th class="num">In 2B only</th>
+        <th class="num">Reliability</th><th>Grade</th><th class="num">ITC at risk ₹</th><th class="num">Open</th>
+    </tr></thead><tbody id="rows"><tr><td style="padding:22px;color:var(--gray)">Loading…</td></tr></tbody></table>
+</div>
+<p id="count" style="color:var(--gray);font-size:12px;margin-top:8px;"></p>
+{% endblock %}
+{% block scripts %}
+<script>
+const fmt=n=>(n||0).toLocaleString('en-IN',{maximumFractionDigits:0});
+const esc=t=>{const d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML;};
+let all=[];
+document.getElementById('fSearch').addEventListener('keydown',e=>{if(e.key==='Enter')render();});
+function gradeColor(g){return {A:'var(--green)',B:'var(--blue)',C:'var(--orange)',D:'var(--red)'}[g]||'var(--gray)';}
+function load(){
+    const q=new URLSearchParams({state:document.getElementById('fState').value});
+    document.getElementById('rows').innerHTML='<tr><td style="padding:22px;color:var(--gray)">Loading…</td></tr>';
+    fetch('/api/scorecard?'+q).then(r=>r.json()).then(d=>{all=d.rows;render();});
+}
+function render(){
+    const g=document.getElementById('fGrade').value, s=document.getElementById('fSearch').value.toLowerCase();
+    const rows=all.filter(r=>(g==='all'||r.grade===g)&&(!s||(r.gstin+r.vendor).toLowerCase().includes(s)));
+    document.getElementById('count').textContent=rows.length+' vendors';
+    document.getElementById('rows').innerHTML=rows.length?rows.map(r=>{
+        const bar=`<div style="display:inline-block;width:54px;height:7px;border-radius:5px;background:var(--dark3);vertical-align:middle;margin-right:6px;"><div style="width:${r.reliability}%;height:100%;border-radius:5px;background:${gradeColor(r.grade)}"></div></div>`;
+        return `<tr>
+            <td><b>${esc(r.gstin)}</b><br><span style="font-size:11px;color:var(--gray-light)">${esc(r.vendor||'')}</span></td>
+            <td class="num">${r.months}</td><td class="num">${r.matched}</td>
+            <td class="num ${r.books_only>0?'neg':''}">${r.books_only}</td><td class="num">${r.gstn_only}</td>
+            <td class="num">${bar}${r.reliability}%</td>
+            <td><span class="badge" style="background:${gradeColor(r.grade)}">${r.grade}</span></td>
+            <td class="num ${r.itc_risk!=0?'neg':''}">${fmt(r.itc_risk)}</td><td class="num">${r.open}</td></tr>`;
+    }).join(''):'<tr><td colspan="9" style="padding:22px;color:var(--gray)">No vendors.</td></tr>';
+}
+load();
+</script>
+{% endblock %}

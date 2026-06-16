@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Settings · WIOM Recon{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div><h2>Settings</h2><div class="sub">Zoho Books live integration & vendor master</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start;">
+  <!-- LEFT: Zoho credentials -->
+  <div class="card">
+    <h2>🔗 Zoho Books — Live Vendor Master</h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+        <span class="chip {{ 'approved' if configured else 'open' }}">{{ 'Connected' if configured else 'Not configured' }}</span>
+        <span class="tag">Vendors in master: {{ vendor_count }}</span>
+        <span class="tag">From Zoho: {{ zoho_count }}</span>
+        <span class="tag">Last sync: {{ last_sync }}</span>
+    </div>
+
+    <form method="POST" action="{{ url_for('save_zoho') }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div><label>Client ID</label><input name="client_id" value="{{ zoho_client_id }}" placeholder="1000.XXXXXXXX"></div>
+            <div><label>Organization ID</label><input name="org_id" value="{{ zoho_org_id }}" placeholder="60000000000"></div>
+            <div><label>Client Secret</label><input name="client_secret" type="password"
+                 placeholder="{{ '•••••• saved — blank to keep' if has_secret else 'paste secret' }}"></div>
+            <div><label>Refresh Token</label><input name="refresh_token" type="password"
+                 placeholder="{{ '•••••• saved — blank to keep' if has_refresh else 'paste refresh token' }}"></div>
+            <div><label>Region (data centre)</label>
+                <select name="region">
+                    {% for r in ['in','com','eu','au','jp'] %}
+                    <option value="{{ r }}" {{ 'selected' if zoho_region==r }}>.{{ r }}{{ ' (India)' if r=='in' }}</option>
+                    {% endfor %}
+                </select></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;">
+            <button class="btn" type="submit">💾 Save</button>
+            <button class="btn ghost" type="button" onclick="testZoho()">🔌 Test connection</button>
+            <button class="btn green" type="button" onclick="syncZoho()">🔄 Sync now</button>
+        </div>
+    </form>
+    <div id="zohoMsg" style="margin-top:14px;font-size:13px;font-weight:600;"></div>
+    <p class="muted" style="margin-top:10px;">Last status: {{ last_status }}</p>
+  </div>
+
+  <!-- RIGHT: setup guide -->
+  <div class="card">
+    <h3>🛠️ One-time setup (then hands-free forever)</h3>
+    <ol style="font-size:12.8px;color:var(--gray-light);line-height:1.95;padding-left:18px;">
+        <li>Go to <b>api-console.zoho.in</b> → create a <b>Self Client</b>.</li>
+        <li>Copy the <b>Client ID</b> &amp; <b>Client Secret</b>.</li>
+        <li>In the Self Client, generate a code with scope
+            <code style="color:var(--pink-light)">ZohoBooks.contacts.READ</code> (valid 10 min).</li>
+        <li>Exchange that code for a <b>Refresh Token</b> (one-time) — the refresh token never expires.</li>
+        <li>Find your <b>Organization ID</b> in Zoho Books → Settings → Organisation.</li>
+        <li>Paste all four here, pick region <b>.in</b>, Save → Test → Sync.</li>
+    </ol>
+    <p class="muted" style="margin-top:8px;">After this, the app auto-refreshes tokens and can re-sync any time — no further action needed. Until configured, vendor names come from the Books export + GSTIN cache automatically.</p>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start;">
+  <!-- EMAIL / SMTP -->
+  <div class="card">
+    <h2>✉️ Email (SMTP) — vendor follow-ups &amp; CFO summary</h2>
+    <div style="margin-bottom:14px;"><span class="chip {{ 'approved' if smtp_configured else 'open' }}">{{ 'Configured' if smtp_configured else 'Not configured' }}</span></div>
+    <form method="POST" action="{{ url_for('save_smtp') }}">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;">
+            <div><label>SMTP Host</label><input name="host" value="{{ smtp_host }}" placeholder="smtp.gmail.com / smtp.office365.com"></div>
+            <div><label>Port</label><input name="port" value="{{ smtp_port }}" placeholder="587"></div>
+            <div><label>Username (email)</label><input name="user" value="{{ smtp_user }}" placeholder="you@wiom.in"></div>
+            <div><label>Password / App-password</label><input name="password" type="password"
+                 placeholder="{{ '•••••• saved' if has_smtp_pw else 'paste password' }}"></div>
+            <div><label>From address</label><input name="from_addr" value="{{ smtp_from }}" placeholder="defaults to username"></div>
+            <div><label style="display:flex;gap:6px;align-items:center;margin-top:22px;"><input type="checkbox" name="use_tls" style="width:auto;" {{ 'checked' if smtp_tls }}> Use TLS</label></div>
+        </div>
+        <div style="border-top:1px solid var(--dark3);margin:16px 0;padding-top:14px;display:grid;grid-template-columns:2fr 1fr;gap:14px;">
+            <div><label>CFO recipient(s) for monthly summary</label><input name="cfo_email" value="{{ cfo_email }}" placeholder="cfo@wiom.in, akash.jain@wiom.in"></div>
+            <div><label>Auto-send day of month</label><input name="cfo_send_day" value="{{ cfo_send_day }}" placeholder="1"></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn" type="submit">💾 Save</button>
+            <button class="btn ghost" type="button" onclick="testSmtp()">🔌 Test SMTP</button>
+            <button class="btn green" type="button" onclick="sendCfo()">📤 Email CFO summary now</button>
+        </div>
+    </form>
+    <div id="smtpMsg" style="margin-top:12px;font-size:13px;font-weight:600;"></div>
+  </div>
+  <!-- GSTR-2B SOURCE / GSP -->
+  <div class="card">
+    <h2>📥 GSTR-2B Source</h2>
+    <p class="muted" style="line-height:1.7;">
+        <b>Current:</b> the uploaded Zoho GSTR-recon export already contains both Books &amp; GSTR-2B — no extra setup needed.<br><br>
+        <b>Fully automatic 2B fetch</b> needs a <b>GSP</b> (GST Suvidha Provider) subscription — e.g. ClearTax, Masters India, GSTZen — because GSTR-2B comes from the Govt GST portal, not Zoho. Once you have a GSP account, share the provider + API key and it plugs in here (same as Zoho).</p>
+    <label style="margin-top:8px;">GSP provider (when you have one)</label>
+    <input value="{{ gsp_provider }}" placeholder="Not set — needs GSP subscription" disabled>
+    <p class="muted" style="margin-top:8px;">Until then, keep uploading the Zoho export under New Recon.</p>
+  </div>
+</div>
+
+<div class="card">
+    <h2>💬 Slack — Daily Status Report</h2>
+    <div style="margin-bottom:14px;"><span class="chip {{ 'approved' if slack_configured else 'open' }}">{{ 'Connected' if slack_configured else 'Not configured' }}</span></div>
+    <form method="POST" action="{{ url_for('save_slack') }}">
+        <div style="display:grid;grid-template-columns:3fr 1fr;gap:14px;">
+            <div><label>Incoming Webhook URL</label><input name="webhook" type="password"
+                placeholder="{{ '•••••• saved — blank to keep' if slack_configured else 'https://hooks.slack.com/services/...' }}"></div>
+            <div><label>Send day (* = daily)</label><input name="slack_send_day" value="{{ slack_send_day }}" placeholder="*"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center;">
+            <button class="btn" type="submit">💾 Save</button>
+            <button class="btn green" type="button" onclick="sendSlack()">📤 Send to Slack now</button>
+            <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--gray-light);"><input type="checkbox" name="clear_webhook" style="width:auto;"> Clear saved webhook</label>
+        </div>
+    </form>
+    <div id="slackMsg" style="margin-top:12px;font-size:13px;font-weight:600;"></div>
+    <p class="muted" style="margin-top:8px;">Setup: api.slack.com → your app → <b>Incoming Webhooks</b> → pick a channel → copy URL → paste here. Report posts daily at 09:30 IST (auto, while app is running) + on-demand.</p>
+</div>
+
+<div class="card">
+    <h2>🛡️ Security &amp; Maintenance</h2>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+        <a class="btn ghost" href="{{ url_for('login_history') }}">🕓 Login History</a>
+        <a class="btn ghost" href="{{ url_for('backup_db') }}">💾 Download DB Backup</a>
+        <span class="muted">Failed-login lockout is active (5 attempts / 15 min). Take a backup before big changes.</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function msg(t,ok){const m=document.getElementById('zohoMsg');m.textContent=t;m.style.color=ok?'var(--green)':'var(--negc)';}
+function testZoho(){
+    msg('Testing…',true);
+    fetch('/settings/zoho/test',{method:'POST'}).then(r=>r.json()).then(d=>{
+        msg((d.ok?'✓ ':'✗ ')+(d.message||d.error||''),d.ok);});
+}
+function syncZoho(){
+    msg('Syncing from Zoho…',true);
+    fetch('/settings/zoho/sync',{method:'POST'}).then(r=>r.json()).then(d=>{
+        if(d.ok)msg(`✓ Synced ${d.count} vendors · ${d.updated_rows} row names updated.`,true);
+        else msg('✗ '+(d.error||'Sync failed'),false);});
+}
+function smsg(t,ok){const m=document.getElementById('smtpMsg');m.textContent=t;m.style.color=ok?'var(--green)':'var(--negc)';}
+function testSmtp(){smsg('Testing SMTP…',true);
+    fetch('/settings/smtp/test',{method:'POST'}).then(r=>r.json()).then(d=>smsg((d.ok?'✓ ':'✗ ')+(d.message||''),d.ok));}
+function sendCfo(){smsg('Sending CFO summary…',true);
+    fetch('/cfo-email/send',{method:'POST'}).then(r=>r.json()).then(d=>smsg((d.ok?'✓ ':'✗ ')+(d.message||''),d.ok));}
+function sendSlack(){const m=document.getElementById('slackMsg');m.textContent='Posting to Slack…';m.style.color='var(--green)';
+    fetch('/slack/send',{method:'POST'}).then(r=>r.json()).then(d=>{m.textContent=(d.ok?'✓ ':'✗ ')+(d.message||'');m.style.color=d.ok?'var(--green)':'var(--negc)';});}
+</script>
+{% endblock %}

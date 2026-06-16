@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · WIOM Recon{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div><h2>Dashboard</h2><div class="sub">{% if current_user.is_admin %}All states · all periods · cumulative{% else %}Your states · cumulative{% endif %}</div></div>
+    <div style="display:flex;gap:10px;">
+        {% if current_user.is_admin %}<a href="{{ url_for('cfo_summary') }}" class="btn ghost">📄 CFO Summary</a>
+        <a href="{{ url_for('upload_page') }}" class="btn">＋ New Recon</a>{% endif %}
+    </div>
+</div>
+
+<div class="stat-grid" style="margin-bottom:16px;grid-template-columns:repeat(5,1fr);">
+    <div class="kpi" style="border-color:var(--red);"><div class="ic">⚠️</div><div class="n tnum red" style="color:var(--red);font-size:24px;">₹<span id="itcRisk">{{ '{:,}'.format(stats.itc_risk) }}</span></div><div class="l">ITC at risk (Books≠2B)</div></div>
+    <div class="kpi"><div class="ic">📊</div><div class="n tnum">{{ stats.total }}</div><div class="l">Total invoice rows</div></div>
+    <div class="kpi"><div class="ic">📥</div><div class="n tnum" style="color:var(--gray-light)">{{ stats.open }}</div><div class="l">Open · awaiting remark</div></div>
+    <div class="kpi"><div class="ic">💬</div><div class="n tnum" style="color:var(--blue)">{{ stats.remarked }}</div><div class="l">Remarked by team</div></div>
+    <div class="kpi"><div class="ic">✅</div><div class="n tnum" style="color:var(--green)">{{ stats.done }}</div><div class="l">Approved / resolved</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:18px;">
+    <div class="card"><h2>🧩 Composition</h2>
+        <div style="height:240px;display:flex;align-items:center;justify-content:center;"><canvas id="donut"></canvas></div>
+        <div id="donutLegend" style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:6px;font-size:12px;"></div>
+    </div>
+    <div class="card"><h2>📉 Top States by Total Difference (₹)</h2>
+        <div style="height:260px;"><canvas id="bars"></canvas></div>
+    </div>
+</div>
+
+<div class="card"><h2>📈 ITC-at-Risk Trend (month-on-month)</h2>
+    <div style="height:240px;"><canvas id="trend"></canvas></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+    <div class="card"><h2>🗂️ By Workflow Status</h2>
+        <table id="byStatus"><tbody><tr><td style="color:var(--gray)">Loading…</td></tr></tbody></table></div>
+    <div class="card"><h2>🏷️ By Reason (RCM / ineligible / timing …)</h2>
+        <table id="byReason"><tbody><tr><td style="color:var(--gray)">Loading…</td></tr></tbody></table></div>
+</div>
+
+<div class="card">
+    <h2>📈 Cumulative — Total Difference by State × Month</h2>
+    <div style="overflow:auto;"><table id="cumTable"><thead></thead><tbody>
+        <tr><td style="color:var(--gray);padding:16px;">Loading…</td></tr></tbody></table></div>
+</div>
+
+<div class="card">
+    <h2>🗂️ Recent Monthly Runs</h2>
+    <table>
+        <thead><tr><th>Period</th><th>Label</th><th>Rows</th><th>Uploaded by</th><th>When</th><th></th></tr></thead>
+        <tbody>
+        {% for r in runs %}
+        <tr><td><b>{{ r.period }}</b></td><td>{{ r.label or '—' }}</td><td class="num">{{ r.total_rows }}</td>
+            <td>{{ r.uploaded_by.name if r.uploaded_by else '—' }}</td><td>{{ r.created_at.strftime('%d-%b-%Y %H:%M') }}</td>
+            <td><a class="btn ghost sm" href="{{ url_for('download') }}?run_id={{ r.id }}">⬇ Excel</a>
+                <a class="btn sm" href="{{ url_for('detail') }}?period={{ r.period }}">Review →</a></td></tr>
+        {% else %}
+        <tr><td colspan="6" style="color:var(--gray);padding:16px;">No reconciliations yet.
+            {% if current_user.is_admin %}<a href="{{ url_for('upload_page') }}" style="color:var(--blue)">Upload the first one →</a>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const css=k=>getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+const fmt=n=>(n||0).toLocaleString('en-IN',{maximumFractionDigits:0});
+
+fetch('/api/counts').then(r=>r.json()).then(c=>{
+    const data=[c.cross||0,c.books||0,c.gstn||0];
+    const labels=['Matched','Books only','GSTR-2B only'];
+    const colors=[css('--green'),css('--pink'),css('--blue')];
+    if(data.every(x=>!x)){document.getElementById('donut').parentElement.innerHTML='<span style="color:var(--gray)">No data yet.</span>';return;}
+    new Chart(document.getElementById('donut'),{type:'doughnut',
+        data:{labels,datasets:[{data,backgroundColor:colors,borderWidth:0,hoverOffset:6}]},
+        options:{cutout:'62%',plugins:{legend:{display:false}},responsive:true,maintainAspectRatio:false}});
+    document.getElementById('donutLegend').innerHTML=labels.map((l,i)=>
+        `<span style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:3px;background:${colors[i]}"></span>${l} <b>${fmt(data[i])}</b></span>`).join('');
+});
+
+fetch('/api/cumulative').then(r=>r.json()).then(d=>{
+    const states=Object.keys(d).sort();
+    const periods=[...new Set(states.flatMap(s=>Object.keys(d[s])))].sort();
+    // ----- bar chart: top states by abs total diff -----
+    const totals=states.map(s=>({s,v:periods.reduce((a,p)=>a+((d[s][p]&&d[s][p].diff)||0),0)}));
+    totals.sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
+    const top=totals.slice(0,10);
+    if(top.length){
+        new Chart(document.getElementById('bars'),{type:'bar',
+            data:{labels:top.map(t=>t.s),datasets:[{data:top.map(t=>t.v),
+                backgroundColor:top.map(t=>t.v<0?css('--red'):css('--green')),borderRadius:6}]},
+            options:{indexAxis:'y',plugins:{legend:{display:false}},responsive:true,maintainAspectRatio:false,
+                scales:{x:{ticks:{color:css('--gray-light'),callback:v=>fmt(v)},grid:{color:css('--dark3')}},
+                        y:{ticks:{color:css('--gray-light')},grid:{display:false}}}}});
+    } else {document.getElementById('bars').parentElement.innerHTML='<span style="color:var(--gray)">No data yet.</span>';}
+    // ----- cumulative table -----
+    const thead=document.querySelector('#cumTable thead'),tbody=document.querySelector('#cumTable tbody');
+    if(!states.length){tbody.innerHTML='<tr><td style="color:var(--gray);padding:16px;">No data yet.</td></tr>';return;}
+    thead.innerHTML='<tr><th>State</th>'+periods.map(p=>`<th class="num">${p}</th>`).join('')+'<th class="num">Approved</th></tr>';
+    tbody.innerHTML=states.map(s=>{let dn=0,ct=0;
+        const cells=periods.map(p=>{const c=d[s][p];if(!c)return '<td class="num" style="color:var(--gray)">—</td>';
+            dn+=c.done;ct+=c.count;return `<td class="num ${c.diff<0?'neg':''}">${fmt(c.diff)}<br><span style="font-size:10px;color:var(--gray)">${c.count} rows</span></td>`;}).join('');
+        return `<tr><td><b>${s}</b></td>${cells}<td class="num">${dn}/${ct}</td></tr>`;}).join('');
+});
+
+fetch('/api/breakdown').then(r=>r.json()).then(b=>{
+    const pill={open:'open',remarked:'remarked',approved:'approved',resolved:'resolved'};
+    const st=Object.entries(b.by_status).sort((a,c)=>c[1].value-a[1].value);
+    document.querySelector('#byStatus tbody').innerHTML = st.length?st.map(([k,v])=>
+        `<tr><td><span class="pill ${pill[k]||'open'}">${k}</span></td><td class="num">${v.count} rows</td><td class="num neg">₹${fmt(v.value)}</td></tr>`).join(''):'<tr><td style="color:var(--gray)">No data.</td></tr>';
+    const rs=Object.entries(b.by_reason);
+    document.querySelector('#byReason tbody').innerHTML = rs.length?rs.map(([k,v])=>
+        `<tr><td>${k}</td><td class="num">${v.count}</td><td class="num neg">₹${fmt(v.value)}</td></tr>`).join(''):'<tr><td style="color:var(--gray)">No reasons assigned yet — team will tag rows (RCM, ineligible, timing…).</td></tr>';
+});
+
+fetch('/api/trend').then(r=>r.json()).then(t=>{
+    if(!t.length){document.getElementById('trend').parentElement.innerHTML='<span style="color:var(--gray)">No data yet.</span>';return;}
+    new Chart(document.getElementById('trend'),{type:'line',
+        data:{labels:t.map(x=>x.period),datasets:[
+            {label:'ITC at Risk (₹)',data:t.map(x=>x.itc_risk),borderColor:css('--red'),backgroundColor:'rgba(255,77,106,.12)',fill:true,tension:.3,pointRadius:3},
+        ]},
+        options:{plugins:{legend:{labels:{color:css('--gray-light')}}},responsive:true,maintainAspectRatio:false,
+            scales:{x:{ticks:{color:css('--gray-light')},grid:{display:false}},
+                    y:{ticks:{color:css('--gray-light'),callback:v=>fmt(v)},grid:{color:css('--dark3')}}}}});
+});
+</script>
+{% endblock %}

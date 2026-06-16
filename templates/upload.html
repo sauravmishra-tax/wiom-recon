@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}New Recon · WIOM{% endblock %}
+{% block content %}
+<div class="page-head"><div><h2>New Reconciliation</h2>
+<div class="sub">Upload one state's Zoho GSTR-recon Excel. Period is auto-detected; data accumulates cumulatively.</div></div></div>
+
+<div class="card" id="uploadCard">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div><label>State (which GST registration)</label>
+            <select id="state">
+                <option value="">— select state —</option>
+                {% for s in ['Delhi','Haryana','Maharashtra','Uttar Pradesh'] %}<option>{{ s }}</option>{% endfor %}
+            </select></div>
+        <div><label>Label (optional)</label>
+            <input type="text" id="label" placeholder="e.g. May 2026 note"></div>
+    </div>
+    <div style="margin-top:16px;"><label>Recon Excel file (.xlsx)</label>
+        <input type="file" id="file" accept=".xlsx,.xls"></div>
+    <button class="btn" id="goBtn" style="margin-top:18px;" onclick="startUpload()">🚀 Run Reconciliation</button>
+</div>
+
+<div class="card" id="progressCard" style="display:none;">
+    <h2>⚙️ <span id="curAgent">Starting…</span> <span id="pct" style="margin-left:auto;color:var(--pink-light)"></span></h2>
+    <div style="background:var(--dark3);border-radius:20px;height:10px;overflow:hidden;margin-bottom:16px;">
+        <div id="bar" style="height:100%;width:0;background:linear-gradient(90deg,var(--pink),var(--pink-light));transition:.3s;"></div>
+    </div>
+    <div id="console" style="background:#000;border:1px solid var(--dark3);border-radius:10px;padding:14px;
+        font-family:ui-monospace,monospace;font-size:11.5px;height:320px;overflow-y:auto;line-height:1.7;"></div>
+    <div id="doneRow" style="display:none;margin-top:16px;gap:10px;display:none;">
+        <a class="btn green" id="dlBtn">⬇ Download Excel</a>
+        <a class="btn" href="{{ url_for('detail') }}" id="reviewBtn">Review & assign remarks →</a>
+    </div>
+    <div id="errRow" style="display:none;margin-top:16px;color:var(--negc);font-weight:600;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let poll=null;
+function startUpload(){
+    const state=document.getElementById('state').value;
+    const label=document.getElementById('label').value;
+    const file=document.getElementById('file').files[0];
+    if(!state){alert('Select the state (Delhi / Haryana / Maharashtra / Uttar Pradesh).');return;}
+    if(!file){alert('Choose an Excel file.');return;}
+    const fd=new FormData();
+    fd.append('file',file); fd.append('label',label); fd.append('state',state);
+    document.getElementById('goBtn').disabled=true;
+    fetch('/upload',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
+        if(d.error){alert(d.error);document.getElementById('goBtn').disabled=false;return;}
+        document.getElementById('progressCard').style.display='block';
+        poll=setInterval(refresh,900); refresh();
+    });
+}
+function refresh(){
+    fetch('/status').then(r=>r.json()).then(s=>{
+        document.getElementById('bar').style.width=s.progress+'%';
+        document.getElementById('pct').textContent=s.progress+'%';
+        document.getElementById('curAgent').textContent=s.current_agent||'Processing…';
+        const c=document.getElementById('console');
+        c.innerHTML=s.logs.map(l=>{
+            const col=l.agent_id===0?'var(--pink-light)':'#7fb0ff';
+            return `<div><span style="color:var(--gray)">${l.time}</span> <span style="color:${col};font-weight:600">[${l.agent}]</span> ${escapeHtml(l.msg)}</div>`;
+        }).join(''); c.scrollTop=c.scrollHeight;
+        if(s.error){clearInterval(poll);document.getElementById('errRow').style.display='block';
+            document.getElementById('errRow').textContent='ERROR: '+s.error;}
+        if(!s.active && s.progress>=100){
+            clearInterval(poll);
+            const dr=document.getElementById('doneRow'); dr.style.display='flex';
+            document.getElementById('dlBtn').href='/download'+(s.run_id?('?run_id='+s.run_id):'');
+        }
+    });
+}
+function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+</script>
+{% endblock %}

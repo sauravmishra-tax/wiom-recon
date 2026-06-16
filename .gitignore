@@ -1,0 +1,27 @@
+# ---- Database (contains user password hashes + any saved Zoho/SMTP/Slack secrets) ----
+*.db
+wiom_recon.db
+
+# ---- Confidential company data — never commit ----
+uploads/
+output/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ---- Secrets / local config ----
+.env
+*.local
+.claude/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

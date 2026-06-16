@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Import Remarks · WIOM{% endblock %}
+{% block content %}
+<div class="page-head"><div><h2>Bulk Import Remarks</h2>
+<div class="sub">Upload a CSV to apply remarks/reasons to many rows at once</div></div></div>
+
+<div class="card" style="max-width:640px;">
+    <p class="muted" style="margin-bottom:14px;">CSV columns (header row required): either <b>row_id</b> OR <b>gstin</b>+<b>invoice</b>, plus <b>reason</b> and/or <b>remark</b>.</p>
+    <div style="background:var(--dark2);border-radius:10px;padding:12px;font-family:ui-monospace,monospace;font-size:12px;margin-bottom:16px;">
+        gstin,invoice,reason,remark<br>
+        07AAACB2100P1ZZ,INV-101,Vendor not filed GSTR-1,Following up<br>
+        ...
+    </div>
+    <input type="file" id="file" accept=".csv">
+    <button class="btn" style="margin-top:14px;" onclick="doImport()">⬆ Import &amp; apply</button>
+    <div id="msg" style="margin-top:14px;font-size:13px;font-weight:600;"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function doImport(){
+    const f=document.getElementById('file').files[0];
+    if(!f){alert('Choose a CSV file.');return;}
+    const fd=new FormData(); fd.append('file',f);
+    document.getElementById('msg').textContent='Importing…';
+    fetch('/import-remarks',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
+        const m=document.getElementById('msg');
+        if(d.ok){m.style.color='var(--green)';m.textContent=`✓ Applied ${d.applied} rows, skipped ${d.skipped}.`;}
+        else{m.style.color='var(--negc)';m.textContent='✗ '+(d.error||'Failed');}
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Login History · WIOM{% endblock %}
+{% block content %}
+<div class="page-head"><div><h2>Login History</h2>
+<div class="sub">Successful &amp; failed sign-in attempts (latest 500) — security audit</div></div></div>
+
+<div class="card" style="padding:0;overflow:auto;max-height:74vh;">
+    <table><thead><tr><th>When (IST)</th><th>Email</th><th>Result</th><th>IP</th><th>Device</th></tr></thead>
+    <tbody>
+    {% for e in events %}
+      <tr>
+        <td style="white-space:nowrap;color:var(--gray-light)">{{ e.created_at.strftime('%d-%b-%Y %H:%M:%S') }}</td>
+        <td>{{ e.email }}</td>
+        <td><span class="pill {{ 'approved' if e.success else 'open' }}">{{ '✓ success' if e.success else '✗ failed' }}</span></td>
+        <td style="font-size:11px;color:var(--gray-light)">{{ e.ip or '—' }}</td>
+        <td style="font-size:11px;color:var(--gray-light);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ e.user_agent or '—' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" style="padding:22px;color:var(--gray)">No login events yet.</td></tr>
+    {% endfor %}
+    </tbody></table>
+</div>
+{% endblock %}
