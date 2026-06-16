@@ -26,6 +26,9 @@ class Config:
         'DATABASE_URL',
         'sqlite:///' + _abs('wiom_recon.db')
     )
+    # Railway/Heroku give postgres:// ; SQLAlchemy 1.4+ needs postgresql://
+    if DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 

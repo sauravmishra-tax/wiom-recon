@@ -37,6 +37,22 @@ export + GST cache on every run. To switch to the **live Zoho Books API**
 later, populate `VendorMaster` from the API (source=`zoho_api`) — nothing else
 changes. Hook lives in `persist.py: sync_vendor_master()`.
 
+## Deploy on Railway (for the manager — ~5 minutes)
+The repo is Railway-ready (`Procfile`, `requirements.txt`, `runtime.txt`, Postgres support).
+
+1. On [railway.app](https://railway.app): **New Project → Deploy from GitHub repo** → pick this repo.
+2. Add a **PostgreSQL** plugin (Railway auto-sets `DATABASE_URL`; the app converts `postgres://` → `postgresql://` itself).
+3. In the service **Variables**, set:
+   ```
+   SECRET_KEY        = <long random string>
+   ADMIN_PASSWORD    = <strong password for the first super-admin login>
+   ADMIN_EMAIL       = tax@wiom.in        (optional; default super-admin email)
+   ```
+4. Deploy. Railway runs the `Procfile` (`gunicorn app:app`). On first boot the DB tables are created and the super-admin is seeded.
+5. Open the Railway URL → log in as `ADMIN_EMAIL` / `ADMIN_PASSWORD` → create the team under **Team**.
+
+Notes: uploaded files & generated Excel live on the container's ephemeral disk (regenerate on demand); all workflow data (users, recon rows, remarks, audit) is in Postgres and persists. Zoho / SMTP / Slack are configured later in-app under **Settings** (super-admin).
+
 ## Moving to cloud later (no code changes)
 The app is local-first but cloud-portable. On the cloud host, set env vars:
 
