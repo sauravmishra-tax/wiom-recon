@@ -841,15 +841,20 @@ def api_counts():
         if not current_user.is_admin and current_user.state_list():
             q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
         return q
-    matched = base().filter(ReconRow.category == 'matched').count()
-    fully = base().filter(ReconRow.category == 'matched',
-                          ReconRow.recon_status.like('%Fully Reconciled%')).count()
+    def amt(q, col):
+        return round(q.with_entities(func.coalesce(func.sum(col), 0)).scalar() or 0)
+    matched_q = base().filter(ReconRow.category == 'matched')
+    books_q = base().filter(ReconRow.category == 'books_only')
+    gstn_q = base().filter(ReconRow.category == 'gstn_only')
+    fully_q = base().filter(ReconRow.category == 'matched',
+                            ReconRow.recon_status.like('%Fully Reconciled%'))
     return jsonify({
-        'cross': matched,
-        'books': base().filter(ReconRow.category == 'books_only').count(),
-        'gstn': base().filter(ReconRow.category == 'gstn_only').count(),
-        'fully': fully,
+        'cross': matched_q.count(),       'cross_amt': amt(matched_q, ReconRow.books_total),
+        'books': books_q.count(),         'books_amt': amt(books_q, ReconRow.books_total),
+        'gstn': gstn_q.count(),           'gstn_amt': amt(gstn_q, ReconRow.gstn_total),
+        'fully': fully_q.count(),         'fully_amt': amt(fully_q, ReconRow.books_total),
         'gap': base().with_entities(ReconRow.gstin).distinct().count(),
+        'gap_amt': amt(base(), ReconRow.total_diff),
     })
 
 

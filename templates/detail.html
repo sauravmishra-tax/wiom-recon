@@ -178,6 +178,7 @@ function repopulatePeriods(){
 }
 function onFyChange(){repopulatePeriods();reloadAll();}
 const params=new URLSearchParams(location.search);
+if(params.get('tab') && TABS[params.get('tab')]) activeTab=params.get('tab');
 if(params.get('period'))document.getElementById('fPeriod').value=params.get('period');
 if(params.get('my')==='1'){document.getElementById('fMy').checked=true;
     document.getElementById('pageTitle').textContent='My Queue';
