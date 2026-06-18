@@ -200,6 +200,9 @@ class ReconRow(db.Model):
             'followup_note': self.followup_note or '',
             'assigned_to': self.assigned_to.name if self.assigned_to else '',
             'assigned_to_id': self.assigned_to_id,
+            'attach_count': db.session.execute(
+                db.text('SELECT COUNT(*) FROM row_attachments WHERE row_id=:rid'),
+                {'rid': self.id}).scalar() or 0,
         }
 
 

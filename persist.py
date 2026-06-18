@@ -7,7 +7,7 @@ Called after the 9-agent engine finishes a run.
 import pandas as pd
 from collections import Counter
 from datetime import datetime
-from models import db, ReconRow, ReconRun, RowComment, AuditLog, VendorMaster, now_ist
+from models import db, ReconRow, ReconRun, RowComment, RowAttachment, AuditLog, VendorMaster, now_ist
 from state_codes import state_from_gstin
 
 
@@ -272,6 +272,12 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
                 db.session.add(RowComment(row_id=row.id, user_id=c.user_id,
                     user_name=c.user_name, user_role=c.user_role,
                     text=c.text, created_at=c.created_at))
+            for a in RowAttachment.query.filter_by(row_id=old.id).all():
+                db.session.add(RowAttachment(
+                    row_id=row.id, filename=a.filename, original_name=a.original_name,
+                    mime_type=a.mime_type, size_kb=a.size_kb, note=a.note,
+                    uploaded_by_id=a.uploaded_by_id, uploaded_by_name=a.uploaded_by_name,
+                    uploaded_at=a.uploaded_at))
             carried += 1
 
     # ---- replace entire state snapshot: delete ALL prior state runs ----
@@ -281,6 +287,7 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
         if old_row_ids:
             AuditLog.query.filter(AuditLog.row_id.in_(old_row_ids)).delete(synchronize_session=False)
             RowComment.query.filter(RowComment.row_id.in_(old_row_ids)).delete(synchronize_session=False)
+            RowAttachment.query.filter(RowAttachment.row_id.in_(old_row_ids)).delete(synchronize_session=False)
             ReconRow.query.filter(ReconRow.run_id.in_(prior_ids)).delete(synchronize_session=False)
         ReconRun.query.filter(ReconRun.id.in_(prior_ids)).delete(synchronize_session=False)
 

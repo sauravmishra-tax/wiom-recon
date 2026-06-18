@@ -144,6 +144,7 @@ const C_STAT = {h:'Status', t:'status'};
 const C_AGE  = {h:'Age', t:'age'};
 const C_FUP  = {h:'Follow-up', t:'fup'};
 const C_ASSIGN = {h:'Assigned', t:'asgn'};
+const C_ATT  = {h:'📎', t:'att'};
 const TABS = {
   cross:{label:'Expert Cross-Match', api:{recon:'cross'}, sel:true, cols:[
     {k:'txn_type',h:'Type'},{k:'books_inv',h:'Books Inv'},{k:'gstn_inv',h:'2B Inv'},{k:'inv_match',h:'Inv✓',t:'m'},
@@ -154,22 +155,22 @@ const TABS = {
     {k:'books_sgst',h:'Bk SGST',t:'n'},{k:'gstn_sgst',h:'2B SGST',t:'n'},
     {k:'books_tax',h:'Bk Tax',t:'n'},{k:'gstn_tax',h:'2B Tax',t:'n'},{k:'tax_diff',h:'Tax Diff',t:'n'},
     {k:'books_total',h:'Bk Total',t:'n'},{k:'gstn_total',h:'2B Total',t:'n'},{k:'total_diff',h:'Total Diff',t:'n'},
-    {k:'diff_pct',h:'Diff%',t:'p'},{k:'recon_status',h:'Recon Status',t:'sm'},C_TEAM,C_STAT]},
+    {k:'diff_pct',h:'Diff%',t:'p'},{k:'recon_status',h:'Recon Status',t:'sm'},C_TEAM,C_ATT,C_STAT]},
   books:{label:'Books Only', api:{category:'books_only'}, sel:true, cols:[
     {k:'books_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'books_date',h:'Date'},
     {k:'books_taxable',h:'Taxable',t:'n'},{k:'books_igst',h:'IGST',t:'n'},{k:'books_cgst',h:'CGST',t:'n'},
     {k:'books_sgst',h:'SGST',t:'n'},{k:'books_tax',h:'Total Tax',t:'n'},{k:'books_total',h:'Total Amt',t:'n'},
-    C_AGE,{k:'recon_status',h:'Cross Status',t:'sm'},C_TEAM,C_ASSIGN,C_FUP,C_STAT]},
+    C_AGE,{k:'recon_status',h:'Cross Status',t:'sm'},C_TEAM,C_ATT,C_ASSIGN,C_FUP,C_STAT]},
   gstn:{label:'GSTR-2B Only', api:{category:'gstn_only'}, sel:true, cols:[
     {k:'gstn_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'gstn_date',h:'Date'},
     {k:'gstn_taxable',h:'Taxable',t:'n'},{k:'gstn_igst',h:'IGST',t:'n'},{k:'gstn_cgst',h:'CGST',t:'n'},
     {k:'gstn_sgst',h:'SGST',t:'n'},{k:'gstn_tax',h:'Total Tax',t:'n'},{k:'gstn_total',h:'Total Amt',t:'n'},
-    C_AGE,{k:'recon_status',h:'Cross Status',t:'sm'},C_TEAM,C_ASSIGN,C_FUP,C_STAT]},
+    C_AGE,{k:'recon_status',h:'Cross Status',t:'sm'},C_TEAM,C_ATT,C_ASSIGN,C_FUP,C_STAT]},
   fully:{label:'Fully Reconciled', api:{recon:'fully'}, sel:true, cols:[
     {k:'books_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'books_date',h:'Date'},
     {k:'books_taxable',h:'Taxable',t:'n'},{k:'books_igst',h:'IGST',t:'n'},{k:'books_cgst',h:'CGST',t:'n'},
     {k:'books_sgst',h:'SGST',t:'n'},{k:'books_tax',h:'Total Tax',t:'n'},{k:'books_total',h:'Total Amt',t:'n'},
-    {k:'recon_status',h:'ITC Status',t:'sm'},C_TEAM,C_STAT]},
+    {k:'recon_status',h:'ITC Status',t:'sm'},C_TEAM,C_ATT,C_STAT]},
   gap:{label:'GSTIN Gap Analysis', gap:true, sel:false, gv2:true, cols:[
     {k:'b_cnt',h:'Bk #',t:'n'},{k:'b_taxable',h:'Bk Taxable',t:'n'},{k:'b_tax',h:'Bk Tax',t:'n'},{k:'b_total',h:'Bk Total',t:'n'},
     {k:'g_cnt',h:'2B #',t:'n'},{k:'g_taxable',h:'2B Taxable',t:'n'},{k:'g_tax',h:'2B Tax',t:'n'},{k:'g_total',h:'2B Total',t:'n'},
@@ -271,6 +272,8 @@ function cell(r,c){
         return `<td><span style="color:${col};font-weight:700;">${d>0?d+'d':'—'}</span></td>`;}
     if(c.t==='fup'){if(r.followup_count>0)return `<td><span class="pill remarked" title="${esc(r.followup_note||'')}">📨 ${r.followup_count} · ${esc(r.followup_by||'')}<br>${esc(r.followup_at||'')}</span></td>`;return '<td><span style="color:var(--gray)">—</span></td>';}
     if(c.t==='team'){const tr=r.team_remark?`${esc(r.team_remark)}<br><span style="font-size:10px;color:var(--blue)">${esc(r.team_reason||'')} · ${esc(r.remarked_by||'')}</span>`:'<span style="color:var(--gray)">—</span>';return `<td style="max-width:210px;">${tr}</td>`;}
+    if(c.t==='att'){if(!r.attach_count)return '<td style="color:var(--gray);text-align:center;">—</td>';
+        return `<td style="text-align:center;cursor:pointer;" onclick="openRow(${r.id})" title="Click to view attachments"><span style="background:rgba(59,155,255,.18);color:var(--blue);border-radius:12px;padding:2px 8px;font-size:11px;font-weight:700;">📎 ${r.attach_count}</span></td>`;}
     if(c.t==='asgn')return r.assigned_to?`<td><span class="pill remarked">👤 ${esc(r.assigned_to)}</span></td>`:'<td><span style="color:var(--gray)">—</span></td>';
     return `<td>${esc(val==null?'—':val)}</td>`;
 }
