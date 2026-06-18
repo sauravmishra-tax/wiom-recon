@@ -16,6 +16,34 @@ def _carry_key(row):
     return (row.gstin or '', (row.books_inv or '').strip(), (row.gstn_inv or '').strip())
 
 
+_MONTHS = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6, 'jul': 7,
+           'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
+
+
+def derive_period_from_file(file_path):
+    """Read the authoritative GSTR-2B return period from the file header
+    (e.g. 'GSTR-2B (April - 2025)') -> '2025-04'. Reliable across re-uploads."""
+    import re
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(file_path, read_only=True)
+        for sh in wb.sheetnames:
+            ws = wb[sh]
+            for row in ws.iter_rows(min_row=1, max_row=2, values_only=True):
+                for cell in row:
+                    if cell and isinstance(cell, str):
+                        m = re.search(r'\(([A-Za-z]{3,})\s*-\s*(\d{4})\)', cell)
+                        if m:
+                            mon = _MONTHS.get(m.group(1)[:3].lower())
+                            if mon:
+                                wb.close()
+                                return f'{int(m.group(2))}-{mon:02d}'
+        wb.close()
+    except Exception:
+        pass
+    return None
+
+
 def derive_period(inv_matched, books_unmatched, gstn_unmatched):
     """Auto-detect the reconciliation period (YYYY-MM) from invoice dates.
     Uses the most common month across all rows; falls back to current month
@@ -192,13 +220,41 @@ def _build_carry_map(run, run_state):
     return carry, prior_ids
 
 
+def _build_cross_period_seen(run_state, current_run_id):
+    """Return a set of (gstin, norm_inv) tuples already persisted for this state
+    in OTHER periods. Used to deduplicate GSTR-2B carry-forward invoices that
+    naturally re-appear in the next month's return."""
+    seen = set()
+    if not run_state:
+        return seen
+    rows = (ReconRow.query
+            .join(ReconRun, ReconRow.run_id == ReconRun.id)
+            .filter(ReconRow.state_name == run_state,
+                    ReconRow.run_id != current_run_id)
+            .with_entities(ReconRow.gstin, ReconRow.books_inv, ReconRow.gstn_inv)
+            .all())
+    for gstin, b_inv, g_inv in rows:
+        inv = (b_inv or '').strip() or (g_inv or '').strip()
+        if gstin and inv:
+            seen.add((gstin.strip(), inv.upper()))
+    return seen
+
+
+def _inv_key_for_row(row):
+    """Canonical invoice key for cross-period dedup check."""
+    inv = (row.books_inv or '').strip() or (row.gstn_inv or '').strip()
+    return ((row.gstin or '').strip(), inv.upper()) if inv else None
+
+
 def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
                 vendor_map=None, gst_cache=None, run_state=None,
                 reconciled_dfs=None):
     """Write all engine rows into the DB for this run. Returns (row_count, carried).
     Smart re-upload: if a prior run exists for the same period+state, its remarks/
     reasons/status/approval/follow-up/assignment/comments are carried over to matching
-    invoices, then the old snapshot is replaced (no duplicates)."""
+    invoices, then the old snapshot is replaced (no duplicates).
+    Cross-period dedup: invoices already reconciled in an earlier period for the same
+    state are skipped (GSTR-2B naturally carries forward late-filed prior-month bills)."""
     if vendor_map:
         sync_vendor_master(vendor_map, gst_cache)
 
@@ -207,13 +263,29 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
 
     carry, prior_ids = _build_carry_map(run, run_state)
 
+    # Cross-period dedup: skip invoices already stored for this state in other periods.
+    # GSTR-2B naturally re-includes prior-month late-filed bills; we must not duplicate them.
+    cross_seen = _build_cross_period_seen(run_state, run.id)
+    skipped = 0
+
+    def _safe_add(row):
+        nonlocal n, skipped
+        k = _inv_key_for_row(row)
+        if k and k in cross_seen:
+            skipped += 1
+            return
+        if k:
+            cross_seen.add(k)
+        db.session.add(row)
+        n += 1
+
     n = 0
     for m in (inv_matched or []):
-        db.session.add(_make_row(run, m, 'matched', run_state, rs_code)); n += 1
+        _safe_add(_make_row(run, m, 'matched', run_state, rs_code))
     for m in (books_unmatched or []):
-        db.session.add(_make_row(run, m, 'books_only', run_state, rs_code)); n += 1
+        _safe_add(_make_row(run, m, 'books_only', run_state, rs_code))
     for m in (gstn_unmatched or []):
-        db.session.add(_make_row(run, m, 'gstn_only', run_state, rs_code)); n += 1
+        _safe_add(_make_row(run, m, 'gstn_only', run_state, rs_code))
     for df in (reconciled_dfs or []):
         n += persist_reconciled_df(run, df, vendor_map, run_state, rs_code)
 
