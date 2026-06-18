@@ -90,10 +90,19 @@ def _start_scheduler(app):
                 ok, msg = _send_slack_report()
                 print(f"  [scheduler] Daily Slack report: {ok} — {msg}")
 
-    sched = BackgroundScheduler(daemon=True)
+    import pytz
+    ist = pytz.timezone('Asia/Kolkata')
+    sched = BackgroundScheduler(daemon=True, timezone=ist)
     sched.add_job(monthly_cfo, 'cron', hour=9, minute=0, id='monthly_cfo')
     sched.add_job(daily_slack, 'cron', hour=9, minute=30, id='daily_slack')
+
+    # Slack Bot daily jobs
+    import slack_notify
+    sched.add_job(slack_notify.notify_pending_summary, 'cron', hour=7,  minute=0, id='slack_pending')
+    sched.add_job(slack_notify.notify_cfo_summary,     'cron', hour=19, minute=0, id='slack_cfo')
+
     sched.start()
+    print("  [scheduler] Started — Slack pending @7:00 IST, Slack CFO summary @19:00 IST")
     return app
 
 
