@@ -197,7 +197,7 @@ def persist_reconciled_df(run, df, vendor_map, run_state=None, run_state_code=No
             books_igst=igst, gstn_igst=igst, books_cgst=cgst, gstn_cgst=cgst,
             books_sgst=sgst, gstn_sgst=sgst, books_total=total, gstn_total=total,
             total_diff=0.0, recon_status='Fully Reconciled (Zoho Auto)',
-            system_remark='Matched by Zoho auto-recon — ITC safe', status='open'))
+            system_remark='Matched by Zoho auto-recon — ITC safe', status='approved'))
         n += 1
     return n
 

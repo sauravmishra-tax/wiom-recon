@@ -1372,6 +1372,18 @@ def backup_db():
     return jsonify({'error': 'Backup only available for SQLite (local) deployments.'}), 400
 
 
+@app.route('/settings/fix-fully-reconciled', methods=['POST'])
+@superadmin_required
+def fix_fully_reconciled_status():
+    """One-time: set status=approved for all Fully Reconciled (Zoho Auto) rows."""
+    updated = ReconRow.query.filter(
+        ReconRow.recon_status.like('%Fully Reconciled%'),
+        ReconRow.status == 'open'
+    ).update({'status': 'approved'}, synchronize_session=False)
+    db.session.commit()
+    return jsonify({'ok': True, 'msg': f'{updated} rows updated to approved.'})
+
+
 @app.route('/settings/clear-recon', methods=['POST'])
 @superadmin_required
 def clear_recon_data():

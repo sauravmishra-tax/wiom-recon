@@ -120,6 +120,7 @@
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
         <a class="btn ghost" href="{{ url_for('login_history') }}">🕓 Login History</a>
         <a class="btn ghost" href="{{ url_for('backup_db') }}">💾 Download DB Backup</a>
+        <button class="btn ghost" onclick="fixFullyReconciled()">✅ Fix Fully Reconciled Status</button>
         <button class="btn" style="background:var(--red);border-color:var(--red);" onclick="clearRecon()">🗑 Clear All Recon Data</button>
         <span class="muted">Failed-login lockout is active (5 attempts / 15 min). Take a backup before big changes.</span>
     </div>
@@ -128,6 +129,11 @@
 
 {% block scripts %}
 <script>
+function fixFullyReconciled(){
+    fetch('/settings/fix-fully-reconciled',{method:'POST'}).then(r=>r.json()).then(d=>{
+        alert(d.msg||d.error);
+    });
+}
 function clearRecon(){
     if(!confirm('This will DELETE all reconciliation rows, runs, comments and audit logs.\nUser accounts, settings and vendor master are kept.\n\nAre you sure?')) return;
     fetch('/settings/clear-recon',{method:'POST'}).then(r=>r.json()).then(d=>{
