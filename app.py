@@ -1487,7 +1487,7 @@ def api_itc_action(row_id):
 
 
 # ---- Vendor Email: send + thread + log ----
-_CONTACT_LINE = "For any concerns or queries, please feel free to contact: mahesh.thakur@wiom.in, tushar.gupta@wiom.in, ap@wiom.in"
+_CONTACT_LINE = "For any concerns or queries, please feel free to contact:\n  @Mahesh Thakur — mahesh.thakur@wiom.in\n  @Tushar Gupta — tushar.gupta@wiom.in\n  @AP — ap@wiom.in"
 
 EMAIL_TEMPLATES = {
     'not_filed': {
@@ -1499,6 +1499,7 @@ Greetings from WIOM!
 We have noticed that the following invoice(s) from your side are **not reflecting in our GSTR-2B** for the period {period}:
 
   • Invoice No: {inv}
+  • Invoice Date: {inv_date}
   • Invoice Amount: ₹{amount}
   • GSTIN (yours): {gstin}
 
@@ -1515,7 +1516,7 @@ Please revert on this email at the earliest to avoid any ITC loss on our side.
 
 Regards,
 {sender}
-WIOM — Accounts & Taxation Team
+WIOM — Finance and Taxation Team
 """,
     },
     'not_received': {
@@ -1527,6 +1528,7 @@ Greetings from WIOM!
 We observed that an invoice appears in our GSTR-2B for the period {period} but has **not been received / booked in our system**:
 
   • Invoice No (as per 2B): {inv}
+  • Invoice Date: {inv_date}
   • Amount (as per 2B): ₹{amount}
   • GSTIN (yours): {gstin}
 
@@ -1538,7 +1540,7 @@ Request you to share the original invoice copy at the earliest so we can book it
 
 Regards,
 {sender}
-WIOM — Accounts & Taxation Team
+WIOM — Finance and Taxation Team
 """,
     },
     'followup': {
@@ -1548,6 +1550,7 @@ WIOM — Accounts & Taxation Team
 This is a follow-up to our earlier email regarding the GST mismatch for:
 
   • Invoice No: {inv}
+  • Invoice Date: {inv_date}
   • Period: {period}
   • GSTIN (yours): {gstin}
 
@@ -1559,7 +1562,7 @@ We have not yet received a response. Request you to kindly revert at the earlies
 
 Regards,
 {sender}
-WIOM — Accounts & Taxation Team
+WIOM — Finance and Taxation Team
 """,
     },
 }
@@ -1569,8 +1572,15 @@ def _build_email_body(tpl_key, row, sender_name, note=''):
     tpl = EMAIL_TEMPLATES.get(tpl_key, EMAIL_TEMPLATES['not_filed'])
     inv = row.books_inv or row.gstn_inv or '—'
     amt = f"{(row.books_total or row.gstn_total or 0):,.0f}"
+    # Invoice date in dd-MM-YYYY format
+    raw_date = row.books_date or row.gstn_date or ''
+    try:
+        from datetime import datetime
+        inv_date = datetime.strptime(str(raw_date), '%Y-%m-%d').strftime('%d-%m-%Y')
+    except Exception:
+        inv_date = raw_date or '—'
     return tpl['body'].format(
-        vendor=row.vendor or 'Vendor', inv=inv, amount=amt,
+        vendor=row.vendor or 'Vendor', inv=inv, inv_date=inv_date, amount=amt,
         gstin=row.gstin or '', period=row.period or '',
         sender=sender_name, note=f'Note: {note}' if note else '',
         contact=_CONTACT_LINE)
@@ -1586,7 +1596,7 @@ def _send_vendor_mail(to, cc, subject, body, in_reply_to=''):
     msg = MIMEMultipart('alternative')
     msg_id = f'<wiom-recon-{uuid.uuid4().hex}@wiom.in>'
     msg['Message-ID'] = msg_id
-    msg['From'] = f"WIOM Recon <{cfg['user']}>"
+    msg['From'] = f"WIOM Finance and Taxation <{cfg['user']}>"
     msg['To'] = to
     if cc:
         msg['Cc'] = cc
@@ -1935,14 +1945,16 @@ def _cfo_context(rows, state):
         if r.category == 'books_only':
             s['risk'] += tax(r, 'b')
     done = sum(1 for r in rows if r.status in ('approved', 'resolved'))
+    rejected = sum(1 for r in rows if r.status == 'rejected')
     return dict(
         scope=(state if state and state != 'all' else 'All States'),
         generated=now_ist().strftime('%d-%b-%Y %H:%M'),
         total=len(rows), matched=len(matched), fully=fully,
-        books_only=sum(1 for r in rows if r.category == 'books_only'),
-        gstn_only=sum(1 for r in rows if r.category == 'gstn_only'),
+        books_only=sum(1 for r in rows if r.category == 'books_only' and r.status != 'rejected'),
+        gstn_only=sum(1 for r in rows if r.category == 'gstn_only' and r.status != 'rejected'),
         itc_risk=round(itc_risk), excess_2b=round(excess_2b),
         done=done, pending=len(rows) - done,
+        rejected=rejected,
         by_state={k: {'rows': v['rows'], 'gap': round(v['gap']), 'risk': round(v['risk'])}
                   for k, v in sorted(by_state.items())},
         top_gaps=gap[:10], breakdown=_breakdown_data(rows))

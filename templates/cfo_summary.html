@@ -2,97 +2,236 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CFO Summary · WIOM Recon</title>
+<title>Controller Summary · WIOM Recon</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Plus Jakarta Sans',sans-serif;background:#eef0f4;color:#15171f;padding:30px;}
-  .sheet{max-width:900px;margin:0 auto;background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.1);overflow:hidden;}
+  body{font-family:'Plus Jakarta Sans',sans-serif;background:#f0f2f7;color:#15171f;min-height:100vh;padding:28px;}
   h1,h2,h3{font-family:'Sora',sans-serif;letter-spacing:-.02em;}
-  .top{background:linear-gradient(110deg,#0B0B11,#1A1023 45%,#7A0A57);color:#fff;padding:26px 34px;display:flex;justify-content:space-between;align-items:center;}
-  .top .logo{display:flex;align-items:center;gap:13px;}
-  .top .ic{height:34px;width:auto;display:block;filter:drop-shadow(0 2px 8px rgba(224,17,157,.45));}
-  .top h1{font-size:20px;} .top p{font-size:11px;color:#c9b6d6;text-transform:uppercase;letter-spacing:.05em;}
-  .top .meta{text-align:right;font-size:12px;color:#d7cfe0;}
-  .body{padding:30px 34px;}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
-  .kpi{border:1px solid #e4e7f0;border-radius:12px;padding:16px;}
-  .kpi .l{font-size:11px;color:#6a7080;font-weight:700;text-transform:uppercase;letter-spacing:.03em;}
-  .kpi .n{font-size:24px;font-weight:800;font-family:'Sora';margin-top:6px;}
-  .red{color:#d61f3a;} .green{color:#0b9d63;} .blue{color:#2270d8;}
-  h2.sec{font-size:14px;margin:22px 0 12px;color:#15171f;}
+
+  /* Header */
+  .page-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;}
+  .page-head .left{display:flex;align-items:center;gap:14px;}
+  .logo-ic{height:36px;filter:drop-shadow(0 2px 10px rgba(224,17,157,.4));}
+  .page-head h1{font-size:22px;color:#15171f;}
+  .page-head .sub{font-size:11px;color:#8a8aa8;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
+  .meta-tag{font-size:12px;color:#8a8aa8;text-align:right;line-height:1.7;}
+  .meta-tag b{color:#15171f;font-size:14px;}
+
+  /* Tiles */
+  .tiles{display:grid;gap:14px;margin-bottom:16px;}
+  .row4{grid-template-columns:repeat(4,1fr);}
+  .row5{grid-template-columns:repeat(5,1fr);}
+  .row1{grid-template-columns:1fr;}
+
+  .tile{background:#fff;border:1px solid #e4e7f0;border-radius:16px;padding:18px 16px;position:relative;overflow:hidden;}
+  .tile::before{content:'';position:absolute;top:-28px;right:-18px;width:76px;height:76px;border-radius:50%;opacity:.1;}
+  .tile.red::before{background:#e0119d;} .tile.blue::before{background:#2270d8;}
+  .tile.green::before{background:#0b9d63;} .tile.orange::before{background:#d9700f;}
+  .tile.gray::before{background:#6a7080;} .tile.purple::before{background:#7C5CFF;}
+
+  .tile .ic{font-size:20px;margin-bottom:8px;}
+  .tile .val{font-size:26px;font-weight:800;font-family:'Sora';line-height:1;color:#15171f;}
+  .tile .lbl{font-size:11px;color:#8a8aa8;margin-top:6px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;}
+  .tile .sub-val{font-size:11px;color:#aaa;margin-top:4px;}
+  .tile.red .val{color:#d61f3a;} .tile.blue .val{color:#2270d8;}
+  .tile.green .val{color:#0b9d63;} .tile.orange .val{color:#d9700f;}
+  .tile.purple .val{color:#7C5CFF;}
+
+  /* Expert cross-match — special banner tile */
+  .tile.expert{background:linear-gradient(110deg,#1A1023,#7A0A57);border:none;color:#fff;}
+  .tile.expert .val{color:#fff;font-size:28px;}
+  .tile.expert .lbl{color:#d7b8e8;}
+  .tile.expert .sub-val{color:#c9a8df;}
+  .tile.expert::before{background:#fff;opacity:.05;}
+
+  /* Section heading */
+  .sec{font-size:12px;font-weight:800;color:#8a8aa8;text-transform:uppercase;letter-spacing:.07em;margin:22px 0 11px;display:flex;align-items:center;gap:8px;}
+  .sec::after{content:'';flex:1;height:1px;background:#e4e7f0;}
+
+  /* Tables */
+  .card{background:#fff;border:1px solid #e4e7f0;border-radius:14px;overflow:hidden;margin-bottom:16px;}
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  th{background:#f4f6f9;text-align:left;padding:9px 11px;font-size:10.5px;text-transform:uppercase;color:#6a7080;font-weight:800;}
-  td{padding:8px 11px;border-bottom:1px solid #eef0f4;}
+  th{background:#f4f6f9;text-align:left;padding:10px 14px;font-size:10.5px;text-transform:uppercase;color:#6a7080;font-weight:800;letter-spacing:.04em;}
+  td{padding:9px 14px;border-bottom:1px solid #f0f2f7;color:#2a2a3a;}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:#fafafa;}
   .num{text-align:right;font-variant-numeric:tabular-nums;}
-  .neg{color:#d61f3a;}
-  .risk-CRITICAL{color:#d61f3a;font-weight:800;}.risk-HIGH{color:#d9700f;font-weight:800;}.risk-MEDIUM{color:#b8860b;}.risk-LOW{color:#0b9d63;}
-  .footer{padding:16px 34px;border-top:1px solid #eef0f4;font-size:11px;color:#8a8aa0;}
-  .btn{position:fixed;top:18px;right:18px;background:linear-gradient(135deg,#E0119D,#7C5CFF);color:#fff;border:none;padding:11px 18px;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(224,17,157,.3);}
-  @media print{body{background:#fff;padding:0;} .sheet{box-shadow:none;border-radius:0;max-width:100%;} .btn{display:none;}}
+  .neg{color:#d61f3a;} .pos{color:#0b9d63;}
+  .risk-CRITICAL{color:#d61f3a;font-weight:800;}.risk-HIGH{color:#d9700f;font-weight:700;}.risk-MEDIUM{color:#b8860b;}.risk-LOW{color:#0b9d63;}
+
+  .print-btn{position:fixed;top:20px;right:20px;background:linear-gradient(135deg,#E0119D,#7C5CFF);color:#fff;border:none;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;box-shadow:0 4px 14px rgba(224,17,157,.3);}
+  .footer{margin-top:24px;font-size:11px;color:#aaa;text-align:center;line-height:1.8;}
+
+  @media print{
+    body{background:#fff;padding:0;}
+    .print-btn{display:none;}
+  }
 </style>
 </head>
 <body>
-<button class="btn" onclick="window.print()">🖨️ Print / Save PDF</button>
-<div class="sheet">
-  <div class="top">
-    <div class="logo"><img src="{{ url_for('static', filename='wiom_logo.png') }}" class="ic" alt="Wiom"><div><h1>WIOM Recon</h1><p>Books × GST · CFO Summary</p></div></div>
-    <div class="meta"><b style="font-size:14px;color:#fff;">{{ scope }}</b><br>Cumulative to date<br>Generated {{ generated }}</div>
+<button class="print-btn" onclick="window.print()">🖨️ Print / PDF</button>
+
+<div class="page-head">
+  <div class="left">
+    <img src="{{ url_for('static', filename='wiom_logo.png') }}" class="logo-ic" alt="WIOM">
+    <div>
+      <h1>WIOM Recon</h1>
+      <div class="sub">Books × GST · Controller Summary</div>
+    </div>
   </div>
-  <div class="body">
-    <div class="kpis">
-      <div class="kpi"><div class="l">ITC at Risk</div><div class="n red">₹{{ '{:,}'.format(itc_risk) }}</div></div>
-      <div class="kpi"><div class="l">Excess in 2B</div><div class="n blue">₹{{ '{:,}'.format(excess_2b) }}</div></div>
-      <div class="kpi"><div class="l">Total Invoice Rows</div><div class="n">{{ '{:,}'.format(total) }}</div></div>
-      <div class="kpi"><div class="l">Resolved / Pending</div><div class="n"><span class="green">{{ done }}</span> / {{ pending }}</div></div>
+  <div class="meta-tag">
+    <b>{{ scope }}</b><br>
+    Cumulative to date<br>
+    Generated {{ generated }}
+  </div>
+</div>
+
+<!-- Row 1: Financial KPIs -->
+<div class="tiles row4">
+  <div class="tile red">
+    <div class="ic">⚠️</div>
+    <div class="val">₹{{ '{:,}'.format(itc_risk) }}</div>
+    <div class="lbl">ITC at Risk</div>
+    <div class="sub-val">Books≠2B tax exposure</div>
+  </div>
+  <div class="tile blue">
+    <div class="ic">📥</div>
+    <div class="val">₹{{ '{:,}'.format(excess_2b) }}</div>
+    <div class="lbl">Excess in GSTR-2B</div>
+    <div class="sub-val">In 2B, not booked</div>
+  </div>
+  <div class="tile gray">
+    <div class="ic">🧾</div>
+    <div class="val">{{ '{:,}'.format(total) }}</div>
+    <div class="lbl">Total Invoice Rows</div>
+    <div class="sub-val">All states combined</div>
+  </div>
+  <div class="tile green">
+    <div class="ic">✅</div>
+    <div class="val"><span style="color:#0b9d63;">{{ done }}</span> <span style="font-size:16px;color:#aaa;">/ {{ pending }}</span></div>
+    <div class="lbl">Resolved / Pending</div>
+    <div class="sub-val">Approved + resolved</div>
+  </div>
+</div>
+
+<!-- Row 2: Expert Cross-Match (full width highlight) -->
+<div class="tiles row1">
+  <div class="tile expert">
+    <div class="ic">🔍</div>
+    <div style="display:flex;align-items:baseline;gap:20px;flex-wrap:wrap;">
+      <div>
+        <div class="val">{{ '{:,}'.format(matched) }}</div>
+        <div class="lbl">Expert Cross-Match</div>
+        <div class="sub-val">Invoices matched across Books &amp; GSTR-2B</div>
+      </div>
+      <div style="border-left:1px solid rgba(255,255,255,.15);padding-left:20px;">
+        <div class="val">{{ '{:,}'.format(fully) }}</div>
+        <div class="lbl">Fully Reconciled</div>
+        <div class="sub-val">Zero difference — clean</div>
+      </div>
+      <div style="border-left:1px solid rgba(255,255,255,.15);padding-left:20px;">
+        <div class="val" style="color:#ff9ed2;">{{ '{:,}'.format(matched - fully) }}</div>
+        <div class="lbl">Matched with Diff</div>
+        <div class="sub-val">Needs review</div>
+      </div>
     </div>
+  </div>
+</div>
 
-    <div class="kpis">
-      <div class="kpi"><div class="l">Matched</div><div class="n green">{{ '{:,}'.format(matched) }}</div></div>
-      <div class="kpi"><div class="l">Fully Reconciled</div><div class="n">{{ '{:,}'.format(fully) }}</div></div>
-      <div class="kpi"><div class="l">In Books, not 2B</div><div class="n red">{{ '{:,}'.format(books_only) }}</div></div>
-      <div class="kpi"><div class="l">In 2B, not Books</div><div class="n blue">{{ '{:,}'.format(gstn_only) }}</div></div>
-    </div>
+<!-- Row 3: Category breakdown -->
+<div class="tiles row4">
+  <div class="tile red">
+    <div class="ic">📚</div>
+    <div class="val">{{ '{:,}'.format(books_only) }}</div>
+    <div class="lbl">In Books, not 2B</div>
+    <div class="sub-val">ITC at risk</div>
+  </div>
+  <div class="tile blue">
+    <div class="ic">🧾</div>
+    <div class="val">{{ '{:,}'.format(gstn_only) }}</div>
+    <div class="lbl">In 2B, not Books</div>
+    <div class="sub-val">Unbooked</div>
+  </div>
+  <div class="tile orange">
+    <div class="ic">🚫</div>
+    <div class="val">{{ '{:,}'.format(rejected or 0) }}</div>
+    <div class="lbl">Rejected — ITC Ineligible</div>
+    <div class="sub-val">Marked ineligible</div>
+  </div>
+  <div class="tile purple">
+    <div class="ic">⏳</div>
+    <div class="val">{{ pending }}</div>
+    <div class="lbl">Pending Approval</div>
+    <div class="sub-val">Awaiting admin action</div>
+  </div>
+</div>
 
-    <h2 class="sec">State-wise Position</h2>
-    <table><thead><tr><th>State</th><th class="num">Rows</th><th class="num">Total Gap (₹)</th><th class="num">ITC at Risk (₹)</th></tr></thead>
-    <tbody>
-    {% for s, v in by_state.items() %}
-      <tr><td><b>{{ s }}</b></td><td class="num">{{ '{:,}'.format(v.rows) }}</td>
-      <td class="num {{ 'neg' if v.gap<0 }}">{{ '{:,}'.format(v.gap) }}</td>
-      <td class="num red">{{ '{:,}'.format(v.risk) }}</td></tr>
-    {% endfor %}
-    </tbody></table>
+<!-- State-wise -->
+<div class="sec">State-wise Position</div>
+<div class="card">
+<table>
+  <thead><tr><th>State</th><th class="num">Rows</th><th class="num">Total Gap (₹)</th><th class="num">ITC at Risk (₹)</th></tr></thead>
+  <tbody>
+  {% for s, v in by_state.items() %}
+    <tr>
+      <td><b>{{ s }}</b></td>
+      <td class="num">{{ '{:,}'.format(v.rows) }}</td>
+      <td class="num {{ 'neg' if v.gap<0 else 'pos' }}">{{ '{:,}'.format(v.gap) }}</td>
+      <td class="num neg">{{ '{:,}'.format(v.risk) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
 
-    {% if breakdown.by_reason %}
-    <h2 class="sec">By Reason (team-tagged)</h2>
-    <table><thead><tr><th>Reason</th><th class="num">Invoices</th><th class="num">Amount at stake (₹)</th></tr></thead>
-    <tbody>
-    {% for rsn, v in breakdown.by_reason.items() %}
-      <tr><td>{{ rsn }}</td><td class="num">{{ '{:,}'.format(v.count) }}</td><td class="num red">{{ '{:,}'.format(v.value) }}</td></tr>
-    {% endfor %}
-    </tbody></table>
-    {% endif %}
+{% if breakdown.by_reason %}
+<div class="sec">By Reason (team-tagged)</div>
+<div class="card">
+<table>
+  <thead><tr><th>Reason</th><th class="num">Invoices</th><th class="num">Amount (₹)</th></tr></thead>
+  <tbody>
+  {% for rsn, v in breakdown.by_reason.items() %}
+    <tr><td>{{ rsn }}</td><td class="num">{{ '{:,}'.format(v.count) }}</td><td class="num neg">{{ '{:,}'.format(v.value) }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
 
-    <h2 class="sec">By Workflow Status</h2>
-    <table><thead><tr><th>Status</th><th class="num">Invoices</th><th class="num">Amount (₹)</th></tr></thead>
-    <tbody>
-    {% for st, v in breakdown.by_status.items() %}
-      <tr><td>{{ st }}</td><td class="num">{{ '{:,}'.format(v.count) }}</td><td class="num">{{ '{:,}'.format(v.value) }}</td></tr>
-    {% endfor %}
-    </tbody></table>
+<div class="sec">By Workflow Status</div>
+<div class="card">
+<table>
+  <thead><tr><th>Status</th><th class="num">Invoices</th><th class="num">Amount (₹)</th></tr></thead>
+  <tbody>
+  {% for st, v in breakdown.by_status.items() %}
+    <tr><td style="text-transform:capitalize;">{{ st }}</td><td class="num">{{ '{:,}'.format(v.count) }}</td><td class="num">{{ '{:,}'.format(v.value) }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
 
-    <h2 class="sec">Top 10 GSTINs by Gap</h2>
-    <table><thead><tr><th>GSTIN</th><th>Vendor</th><th>State</th><th class="num">Total Gap (₹)</th><th>Risk</th><th>Action</th></tr></thead>
-    <tbody>
-    {% for g in top_gaps %}
-      <tr><td><b>{{ g.gstin }}</b></td><td>{{ g.vendor }}</td><td>{{ g.state }}</td>
+<div class="sec">Top 10 GSTINs by Gap</div>
+<div class="card">
+<table>
+  <thead><tr><th>GSTIN</th><th>Vendor</th><th>State</th><th class="num">Total Gap (₹)</th><th>Risk</th><th>Action</th></tr></thead>
+  <tbody>
+  {% for g in top_gaps %}
+    <tr>
+      <td><b>{{ g.gstin }}</b></td>
+      <td>{{ g.vendor }}</td><td>{{ g.state }}</td>
       <td class="num {{ 'neg' if g.total_gap<0 }}">{{ '{:,}'.format(g.total_gap|int) }}</td>
-      <td class="risk-{{ g.risk }}">{{ g.risk }}</td><td>{{ g.action }}</td></tr>
-    {% endfor %}
-    </tbody></table>
-  </div>
-  <div class="footer">WIOM Recon — Books vs GST Reconciliation Intelligence · Confidential · Auto-generated. ITC at Risk = tax of invoices in Books but missing from GSTR-2B.</div>
+      <td class="risk-{{ g.risk }}">{{ g.risk }}</td>
+      <td style="color:#8a8aa8;">{{ g.action }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<div class="footer">
+  WIOM Recon — Books vs GST Reconciliation Intelligence · Confidential · Auto-generated<br>
+  ITC at Risk = tax on invoices in Books but missing from GSTR-2B
 </div>
 </body>
 </html>
