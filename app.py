@@ -848,11 +848,16 @@ def api_counts():
         q = ReconRow.query
         period = request.args.get('period')
         state = request.args.get('state')
+        search = request.args.get('q', '').strip()
         if period and period != 'all':
             q = q.filter(ReconRow.period == period)
         if state and state != 'all':
             q = q.filter(ReconRow.state_name == state)
         q = _apply_fy(q, request.args.get('fy'))
+        if search:
+            like = f'%{search}%'
+            q = q.filter(ReconRow.gstin.like(like) | ReconRow.vendor.like(like) |
+                         ReconRow.books_inv.like(like) | ReconRow.gstn_inv.like(like))
         if not current_user.is_admin and current_user.state_list():
             q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
         return q
@@ -978,15 +983,20 @@ def api_breakdown():
 
 
 def _filtered_rows_query():
-    """ReconRow query filtered by period/state/fy args + user's state restriction."""
+    """ReconRow query filtered by period/state/fy/search args + user's state restriction."""
     q = ReconRow.query
     period = request.args.get('period')
     state = request.args.get('state')
+    search = request.args.get('q', '').strip()
     if period and period != 'all':
         q = q.filter(ReconRow.period == period)
     if state and state != 'all':
         q = q.filter(ReconRow.state_name == state)
     q = _apply_fy(q, request.args.get('fy'))
+    if search:
+        like = f'%{search}%'
+        q = q.filter(ReconRow.gstin.like(like) | ReconRow.vendor.like(like) |
+                     ReconRow.books_inv.like(like) | ReconRow.gstn_inv.like(like))
     if not current_user.is_admin and current_user.state_list():
         q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
     return q
