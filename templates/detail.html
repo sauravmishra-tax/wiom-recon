@@ -256,7 +256,7 @@ function cell(r,c){
     if(c.t==='m'){const ok=val==='YES';return `<td><span class="pill ${ok?'approved':(val==='NO'?'remarked':'open')}">${val||'—'}</span></td>`;}
     if(c.t==='sm')return `<td style="font-size:11px;color:var(--gray-light);max-width:170px;">${esc(val||'')}</td>`;
     if(c.t==='risk')return `<td><span class="risk-${val}">${val||''}</span></td>`;
-    if(c.t==='status')return `<td><span class="pill ${val}">${val}</span></td>`;
+    if(c.t==='status'){const s=val||'open';return `<td><span class="pill ${s}">${s}</span></td>`; }
     if(c.t==='age'){const d=r.days_open||0;const col=d>=14?'var(--red)':(d>=7?'var(--orange)':'var(--gray-light)');
         return `<td><span style="color:${col};font-weight:700;">${d>0?d+'d':'—'}</span></td>`;}
     if(c.t==='fup'){if(r.followup_count>0)return `<td><span class="pill remarked" title="${esc(r.followup_note||'')}">📨 ${r.followup_count} · ${esc(r.followup_by||'')}<br>${esc(r.followup_at||'')}</span></td>`;return '<td><span style="color:var(--gray)">—</span></td>';}
