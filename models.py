@@ -245,6 +245,23 @@ class RowComment(db.Model):
     created_at = db.Column(db.DateTime, default=now_ist)
 
 
+class RowAttachment(db.Model):
+    """File attachments on a reconciliation row (invoice image, email screenshot, etc.)."""
+    __tablename__ = 'row_attachments'
+    id = db.Column(db.Integer, primary_key=True)
+    row_id = db.Column(db.Integer, db.ForeignKey('recon_rows.id'), index=True)
+    filename = db.Column(db.String(300))        # stored filename on disk
+    original_name = db.Column(db.String(300))   # original uploaded name
+    mime_type = db.Column(db.String(100), default='')
+    size_kb = db.Column(db.Integer, default=0)
+    note = db.Column(db.Text, default='')       # optional caption
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    uploaded_by_name = db.Column(db.String(120))
+    uploaded_at = db.Column(db.DateTime, default=now_ist)
+
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
+
+
 class LoginEvent(db.Model):
     """Login history + failed-attempt log (security)."""
     __tablename__ = 'login_events'

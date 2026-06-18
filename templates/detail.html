@@ -103,6 +103,16 @@
             <button class="btn sm" onclick="postComment()">Send</button>
         </div>
     </div>
+    <!-- attachments -->
+    <div style="margin-top:16px;border-top:1px solid var(--dark3);padding-top:12px;">
+        <h3 style="font-size:13px;margin-bottom:8px;">📎 Attachments <span class="muted" style="font-weight:400;">(invoice, email screenshot, PDF)</span></h3>
+        <div id="mAttachList" style="font-size:12px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input type="file" id="mAttachFile" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.xlsx,.xls,.msg,.eml" style="font-size:12px;flex:1;min-width:0;">
+            <input id="mAttachNote" placeholder="Caption (optional)" style="width:180px;font-size:12px;">
+            <button class="btn sm" onclick="uploadAttach()">Upload</button>
+        </div>
+    </div>
     <div id="mHistory" style="margin-top:14px;"></div>
   </div>
 </div>
@@ -295,8 +305,12 @@ function openRow(id){cur=rowsCache[id];const r=cur;
     document.getElementById('mHistory').innerHTML='';
     document.getElementById('mComments').innerHTML='';
     document.getElementById('mCommentText').value='';
+    document.getElementById('mAttachList').innerHTML='<span style="color:var(--gray);font-size:12px;">Loading…</span>';
+    document.getElementById('mAttachFile').value='';
+    document.getElementById('mAttachNote').value='';
     renderFollow(r);
     loadComments();
+    loadAttachments();
     document.getElementById('modal').classList.add('show');}
 function renderFollow(r){
     const el=document.getElementById('mFollow');
@@ -316,6 +330,43 @@ function doFollowup(){
     window.open(`mailto:?subject=${subj}&body=${body}`,'_blank');
     fetch(`/api/row/${cur.id}/followup`,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({note})}).then(r=>r.json()).then(d=>{if(d.ok){cur=d.row;rowsCache[cur.id]=d.row;renderFollow(d.row);load();}});
+}
+function loadAttachments(){
+    fetch(`/api/row/${cur.id}/attachments`).then(r=>r.json()).then(list=>{
+        const el=document.getElementById('mAttachList');
+        if(!list.length){el.innerHTML='<span style="color:var(--gray)">No attachments yet.</span>';return;}
+        el.innerHTML=list.map(a=>{
+            const isImg=/\.(png|jpg|jpeg|gif|webp)$/i.test(a.name);
+            const isPdf=/\.pdf$/i.test(a.name);
+            const icon=isImg?'🖼️':isPdf?'📄':'📎';
+            return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--dark2);border-radius:8px;margin-bottom:6px;">
+                <span>${icon}</span>
+                <a href="/api/attachments/${a.id}" target="_blank" style="color:var(--blue);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(a.name)}">${esc(a.name)}</a>
+                ${a.note?`<span style="font-size:10px;color:var(--gray-light);max-width:120px;overflow:hidden;text-overflow:ellipsis;">${esc(a.note)}</span>`:''}
+                <span style="font-size:10px;color:var(--gray);">${a.size_kb}KB · ${esc(a.by)} · ${esc(a.at)}</span>
+                ${isImg?`<a href="/api/attachments/${a.id}" target="_blank" style="font-size:10px;color:var(--blue);">View</a>`:''}
+                <span onclick="deleteAttach(${a.id})" style="cursor:pointer;color:var(--red);font-size:14px;padding:0 4px;" title="Delete">×</span>
+            </div>`;
+        }).join('');
+    });
+}
+function uploadAttach(){
+    const f=document.getElementById('mAttachFile').files[0];
+    if(!f){alert('Choose a file first.');return;}
+    const fd=new FormData();
+    fd.append('file',f);
+    fd.append('note',document.getElementById('mAttachNote').value||'');
+    fetch(`/api/row/${cur.id}/attachments`,{method:'POST',body:fd})
+        .then(r=>r.json()).then(d=>{
+            if(d.error){alert(d.error);return;}
+            document.getElementById('mAttachFile').value='';
+            document.getElementById('mAttachNote').value='';
+            loadAttachments();
+        });
+}
+function deleteAttach(id){
+    if(!confirm('Delete this attachment?'))return;
+    fetch(`/api/attachments/${id}`,{method:'DELETE'}).then(r=>r.json()).then(()=>loadAttachments());
 }
 function loadComments(){fetch(`/api/row/${cur.id}/comments`).then(r=>r.json()).then(cs=>{
     document.getElementById('mComments').innerHTML=cs.length?cs.map(c=>`<div style="margin-bottom:8px;padding:8px 10px;background:var(--dark2);border-radius:8px;">

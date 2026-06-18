@@ -25,8 +25,8 @@ sys.path.insert(0, BASE_DIR)
 
 from config import Config
 from models import (db, User, ReconRun, ReconRow, VendorMaster, AuditLog,
-                    Setting, RowComment, LoginEvent, log_audit, now_ist,
-                    get_setting, set_setting)
+                    Setting, RowComment, RowAttachment, LoginEvent, log_audit,
+                    now_ist, get_setting, set_setting)
 from auth import login_manager, auth_bp, admin_required, superadmin_required
 from persist import persist_run, derive_period, derive_period_from_file
 from state_codes import STATE_CODES, WIOM_STATES
@@ -55,6 +55,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         _seed_admin(app)
+        _auto_approve_fully_reconciled()
 
     _start_scheduler(app)
     return app
@@ -93,6 +94,18 @@ def _start_scheduler(app):
     sched.add_job(daily_slack, 'cron', hour=9, minute=30, id='daily_slack')
     sched.start()
     return app
+
+
+def _auto_approve_fully_reconciled():
+    """On every startup: ensure all Fully Reconciled rows are status=approved.
+    Idempotent — only touches rows still stuck on 'open'."""
+    updated = ReconRow.query.filter(
+        ReconRow.recon_status.like('%Fully Reconciled%'),
+        ReconRow.status == 'open'
+    ).update({'status': 'approved'}, synchronize_session=False)
+    if updated:
+        db.session.commit()
+        print(f"  [startup] Auto-approved {updated} Fully Reconciled rows.")
 
 
 def _seed_admin(app):
@@ -1163,6 +1176,88 @@ def api_comments(row_id):
     cs = RowComment.query.filter_by(row_id=row_id).order_by(RowComment.created_at).all()
     return jsonify([{'user': c.user_name, 'role': c.user_role, 'text': c.text,
                      'at': c.created_at.strftime('%d-%b-%Y %H:%M')} for c in cs])
+
+
+# ---- Attachments (invoice images, email screenshots, PDFs) ----
+ATTACH_DIR = os.path.join(BASE_DIR, 'attachments')
+os.makedirs(ATTACH_DIR, exist_ok=True)
+ALLOWED_ATTACH = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'xlsx', 'xls', 'msg', 'eml'}
+
+
+def _ext_ok(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_ATTACH
+
+
+@app.route('/api/row/<int:row_id>/attachments', methods=['GET'])
+@login_required
+def api_attachments_get(row_id):
+    row = db.session.get(ReconRow, row_id)
+    if not row or not current_user.can_see_state(row.state_name):
+        abort(403)
+    atts = RowAttachment.query.filter_by(row_id=row_id).order_by(RowAttachment.uploaded_at).all()
+    return jsonify([{
+        'id': a.id, 'name': a.original_name, 'note': a.note or '',
+        'size_kb': a.size_kb, 'mime': a.mime_type,
+        'by': a.uploaded_by_name, 'at': a.uploaded_at.strftime('%d-%b-%Y %H:%M'),
+    } for a in atts])
+
+
+@app.route('/api/row/<int:row_id>/attachments', methods=['POST'])
+@login_required
+def api_attachments_post(row_id):
+    row = db.session.get(ReconRow, row_id)
+    if not row or not current_user.can_see_state(row.state_name):
+        abort(403)
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'error': 'No file sent.'}), 400
+    if not _ext_ok(f.filename):
+        return jsonify({'error': f'File type not allowed. Use: {", ".join(sorted(ALLOWED_ATTACH))}'}), 400
+    note = (request.form.get('note') or '').strip()[:300]
+    safe = secure_filename(f.filename)
+    stored = f'{row_id}_{now_ist().strftime("%Y%m%d%H%M%S")}_{safe}'
+    path = os.path.join(ATTACH_DIR, stored)
+    f.save(path)
+    size_kb = max(1, os.path.getsize(path) // 1024)
+    db.session.add(RowAttachment(
+        row_id=row_id, filename=stored, original_name=f.filename,
+        mime_type=f.mimetype or '', size_kb=size_kb, note=note,
+        uploaded_by_id=current_user.id, uploaded_by_name=current_user.name,
+    ))
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/attachments/<int:att_id>')
+@login_required
+def api_attachment_view(att_id):
+    att = db.session.get(RowAttachment, att_id)
+    if not att:
+        abort(404)
+    row = db.session.get(ReconRow, att.row_id)
+    if not row or not current_user.can_see_state(row.state_name):
+        abort(403)
+    path = os.path.join(ATTACH_DIR, att.filename)
+    if not os.path.exists(path):
+        abort(404)
+    return send_file(path, download_name=att.original_name, as_attachment=False)
+
+
+@app.route('/api/attachments/<int:att_id>', methods=['DELETE'])
+@login_required
+def api_attachment_delete(att_id):
+    att = db.session.get(RowAttachment, att_id)
+    if not att:
+        abort(404)
+    # Only uploader or admin can delete
+    if att.uploaded_by_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    path = os.path.join(ATTACH_DIR, att.filename)
+    if os.path.exists(path):
+        os.remove(path)
+    db.session.delete(att)
+    db.session.commit()
+    return jsonify({'ok': True})
 
 
 # ---- Feature 10: vendor follow-up (Book-Keeping shoots mail; everyone sees tracking) ----
