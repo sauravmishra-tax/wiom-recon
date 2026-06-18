@@ -90,7 +90,7 @@ def _date(v):
     if v is None or (isinstance(v, float) and pd.isna(v)):
         return ''
     try:
-        return pd.Timestamp(v).strftime('%d-%m-%Y')
+        return pd.to_datetime(v, dayfirst=True).strftime('%d-%m-%Y')
     except Exception:
         return str(v)
 

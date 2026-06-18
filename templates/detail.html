@@ -445,7 +445,7 @@ function doFollowup(){
     const note=prompt('Follow-up note (e.g. emailed vendor for GSTR-1):')||'';
     // open a pre-filled mail draft for the team to actually send
     const subj=encodeURIComponent(`GST follow-up: ${cur.gstin} ${cur.books_inv||cur.gstn_inv||''}`);
-    const body=encodeURIComponent(`Dear ${cur.vendor||'Vendor'},\n\nRegarding GSTIN ${cur.gstin}, invoice ${cur.books_inv||cur.gstn_inv||''} (₹${fmt(cur.books_total||cur.gstn_total)}) — it is not reflecting correctly in GSTR-2B. Request you to file/amend your GSTR-1.\n\nRegards,\nWIOM Finance and Taxation Team`);
+    const body=encodeURIComponent(`Dear ${cur.vendor||'Vendor'},\n\nRegarding GSTIN ${cur.gstin}, invoice ${cur.books_inv||cur.gstn_inv||''} (₹${fmt(cur.books_total||cur.gstn_total)}) — it is not reflecting correctly in GSTR-2B. Request you to file/amend your GSTR-1.\n\nRegards,\n`);
     window.open(`mailto:?subject=${subj}&body=${body}`,'_blank');
     fetch(`/api/row/${cur.id}/followup`,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({note})}).then(r=>r.json()).then(d=>{if(d.ok){cur=d.row;rowsCache[cur.id]=d.row;renderFollow(d.row);load();}});
@@ -488,21 +488,41 @@ function deleteAttach(id){
     fetch(`/api/attachments/${id}`,{method:'DELETE'}).then(r=>r.json()).then(()=>loadAttachments());
 }
 // ---- email template builder (mirrors Python EMAIL_TEMPLATES) ----
-const _CONTACT = `For any concerns or queries, please feel free to contact:\n  @Mahesh Thakur — mahesh.thakur@wiom.in\n  @Tushar Gupta — tushar.gupta@wiom.in\n  @AP — ap@wiom.in`;
-const _DEFAULT_CC = 'wiomfinance@wiom.in';
+const _CONTACT = `For any concerns or queries, please feel free to contact @mahesh.thakur@wiom.in, @tushar.gupta@wiom.in and @ap@wiom.in`;
+const _DEFAULT_CC = 'mahesh.thakur@wiom.in, wiomfinance@wiom.in, tushar.gupta@wiom.in, ap@wiom.in';
+const _SIGN = `Regards,\nFinance and Taxation Team\nOmnia Information Private Limited`;
+
+function fmtPeriod(p){
+  if(!p)return'';
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const parts=p.split('-');
+  if(parts.length<2)return p;
+  return `${months[parseInt(parts[1])-1]}' ${parts[0].slice(2)}`;
+}
+function fmtDate(d){return d?String(d).trim():'—';}
+function invTable(rows, invKey, dateKey, amtKey){
+  const hdr=`\n  Sr.  Invoice No                    Date          Amount (₹)\n  ${'─'.repeat(62)}\n`;
+  const body=rows.map((r,i)=>{
+    const sr=String(i+1).padEnd(4);
+    const inv=(r[invKey]||'—').padEnd(30);
+    const dt=fmtDate(r[dateKey]||'').padEnd(14);
+    const amt=fmt(r[amtKey]||0);
+    return`  ${sr} ${inv} ${dt} ${amt}`;
+  }).join('\n');
+  return hdr+body+`\n  ${'─'.repeat(62)}`;
+}
+
 const _MAIL_TPLS = {
   not_filed:{
     subject:r=>`GST ITC Alert: ${r.vendor||r.gstin||'Vendor'} — Invoice(s) not reflecting in GSTR-2B`,
-    body:(r,note,sender)=>{const d=r.books_date?r.books_date.split('-').reverse().join('-'):'—';return`Dear ${r.vendor||'Vendor'},
+    body:(r,note)=>`Dear M/s ${r.vendor||'Vendor'},
 
 Greetings from WIOM!
 
-We have noticed that the following invoice(s) from your side are not reflecting in our GSTR-2B for the period ${r.period||''}:
+We have noticed that the following invoice(s) from your side are not reflecting in our GSTR-2B for the period ${fmtPeriod(r.period)}:
+${invTable([r],'books_inv','books_date','books_total')}
 
-  • Invoice No  : ${r.books_inv||r.gstn_inv||'—'}
-  • Invoice Date: ${d}
-  • Invoice Amt : ₹${fmt(r.books_total||r.gstn_total||0)}
-  • GSTIN (yours): ${r.gstin||''}
+GSTIN (yours): ${r.gstin||''}
 
 This is causing an ITC mismatch in our books. Request you to:
 1. Verify whether GSTR-1 has been filed for the above invoice.
@@ -510,72 +530,62 @@ This is causing an ITC mismatch in our books. Request you to:
 3. If already filed, share the acknowledgement/filing date for our records.
 
 Please revert on this email at the earliest to avoid any ITC loss on our side.
-${note?'\nNote: '+note:''}
+${note?'Note: '+note:''}
 
 ${_CONTACT}
 
-Regards,
-${sender}
-WIOM — Finance and Taxation Team`;}
+${_SIGN}`
   },
   not_received:{
     subject:r=>`GST Invoice Clarification: ${r.vendor||r.gstin||'Vendor'} — Invoice in GSTR-2B but not received`,
-    body:(r,note,sender)=>{const d=r.gstn_date?r.gstn_date.split('-').reverse().join('-'):'—';return`Dear ${r.vendor||'Vendor'},
+    body:(r,note)=>`Dear M/s ${r.vendor||'Vendor'},
 
 Greetings from WIOM!
 
-We observed that an invoice appears in our GSTR-2B for the period ${r.period||''} but has not been received / booked in our system:
+We observed that an invoice appears in our GSTR-2B for the period ${fmtPeriod(r.period)} but has not been received / booked in our system:
+${invTable([r],'gstn_inv','gstn_date','gstn_total')}
 
-  • Invoice No (as per 2B): ${r.gstn_inv||r.books_inv||'—'}
-  • Invoice Date           : ${d}
-  • Amount (as per 2B)    : ₹${fmt(r.gstn_total||r.books_total||0)}
-  • GSTIN (yours)         : ${r.gstin||''}
+GSTIN (yours): ${r.gstin||''}
 
 Request you to share the original invoice copy at the earliest so we can book it in our records.
-${note?'\nNote: '+note:''}
+${note?'Note: '+note:''}
 
 ${_CONTACT}
 
-Regards,
-${sender}
-WIOM — Finance and Taxation Team`;}
+${_SIGN}`
   },
   followup:{
     subject:r=>`Follow-up: ${r.vendor||r.gstin||'Vendor'} — GST ITC Mismatch (Invoice ${r.books_inv||r.gstn_inv||''})`,
-    body:(r,note,sender)=>{const d=(r.books_date||r.gstn_date||'').split('-').reverse().join('-')||'—';return`Dear ${r.vendor||'Vendor'},
+    body:(r,note)=>`Dear M/s ${r.vendor||'Vendor'},
 
-This is a follow-up to our earlier email regarding the GST mismatch for:
+This is a follow-up to our earlier email regarding the GST mismatch for the period ${fmtPeriod(r.period)}:
+${invTable([r], r.books_inv?'books_inv':'gstn_inv', r.books_date?'books_date':'gstn_date', r.books_total?'books_total':'gstn_total')}
 
-  • Invoice No  : ${r.books_inv||r.gstn_inv||'—'}
-  • Invoice Date: ${d}
-  • Period      : ${r.period||''}
-  • GSTIN       : ${r.gstin||''}
+GSTIN: ${r.gstin||''}
 
 We have not yet received a response. Request you to kindly revert at the earliest.
-${note?'\nNote: '+note:''}
+${note?'Note: '+note:''}
 
 ${_CONTACT}
 
-Regards,
-${sender}
-WIOM — Finance and Taxation Team`;}
+${_SIGN}`
   },
 };
-function buildVendorMailBody(gstin, vendor, period, rows, note, sender){
+function buildVendorMailBody(gstin, vendor, period, rows, note){
   const booksOnly=rows.filter(r=>r.category==='books_only');
   const gstnOnly=rows.filter(r=>r.category==='gstn_only');
-  let lines=`Dear ${vendor||'Vendor'},\n\nGreetings from WIOM!\n\nWe are writing regarding GST reconciliation mismatches for your GSTIN ${gstin} for the period ${period||''}.\n`;
+  let lines=`Dear M/s ${vendor||'Vendor'},\n\nGreetings from WIOM!\n\nWe are writing regarding GST reconciliation mismatches for your GSTIN ${gstin} for the period ${fmtPeriod(period)}.\n`;
   if(booksOnly.length){
-    lines+=`\nInvoices in our BOOKS but NOT in GSTR-2B (${booksOnly.length} invoice${booksOnly.length>1?'s':''}):\n`;
-    booksOnly.forEach((r,i)=>{const d=r.books_date?r.books_date.split('-').reverse().join('-'):'—';lines+=`  ${i+1}. ${r.books_inv||'—'}  Rs.${fmt(r.books_total||0)}  (Date: ${d})\n`;});
-    lines+=`\nAction required: Please verify and file GSTR-1 for the above so ITC reflects in our GSTR-2B.\n`;
+    lines+=`\nInvoices in our BOOKS but NOT in GSTR-2B (${booksOnly.length} invoice${booksOnly.length>1?'s':''}):`
+      +invTable(booksOnly,'books_inv','books_date','books_total')
+      +`\n\nAction required: Please verify and file GSTR-1 for the above so ITC reflects in our GSTR-2B.\n`;
   }
   if(gstnOnly.length){
-    lines+=`\nInvoices in GSTR-2B but NOT received by us (${gstnOnly.length} invoice${gstnOnly.length>1?'s':''}):\n`;
-    gstnOnly.forEach((r,i)=>{const d=r.gstn_date?r.gstn_date.split('-').reverse().join('-'):'—';lines+=`  ${i+1}. ${r.gstn_inv||'—'}  Rs.${fmt(r.gstn_total||0)}  (Date: ${d})\n`;});
-    lines+=`\nAction required: Kindly share original invoice copies for the above.\n`;
+    lines+=`\nInvoices in GSTR-2B but NOT received by us (${gstnOnly.length} invoice${gstnOnly.length>1?'s':''}):`
+      +invTable(gstnOnly,'gstn_inv','gstn_date','gstn_total')
+      +`\n\nAction required: Kindly share original invoice copies for the above.\n`;
   }
-  lines+=`\nPlease revert at the earliest to avoid any ITC loss.\n${note?'\nNote: '+note:''}\n\n${_CONTACT}\n\nRegards,\n${sender}\nWIOM — Finance and Taxation Team`;
+  lines+=`\nPlease revert at the earliest to avoid any ITC loss.\n${note?'Note: '+note:''}\n\n${_CONTACT}\n\n${_SIGN}`;
   return lines;
 }
 function previewMailTemplate(){
@@ -583,7 +593,7 @@ function previewMailTemplate(){
     const tpl=document.getElementById('mMailTpl').value;
     const t=_MAIL_TPLS[tpl]||_MAIL_TPLS.not_filed;
     document.getElementById('mMailSubject').value=t.subject(cur);
-    document.getElementById('mMailBody').value=t.body(cur,'','WIOM Finance and Taxation Team');
+    document.getElementById('mMailBody').value=t.body(cur,'','');
 }
 function openMailCompose(){
     document.getElementById('mEmailForm').style.display='block';
@@ -716,11 +726,11 @@ function toggleVendorMailForm(){
             const rows=data.rows||[];
             const vendor=vCurRows.length?vCurRows[0].vendor||'Vendor':'Vendor';
             const period=rows.length?rows[0].period||'':'';
-            const sender='WIOM Finance and Taxation Team';
+            const sender='';
             if(!document.getElementById('vMailSubject').value)
                 document.getElementById('vMailSubject').value=`GST Reconciliation Mismatch — ${vendor} (${period})`;
             if(!document.getElementById('vMailBody').value)
-                document.getElementById('vMailBody').value=buildVendorMailBody(vCurGstin,vendor,period,rows,'',sender);
+                document.getElementById('vMailBody').value=buildVendorMailBody(vCurGstin,vendor,period,rows,'');
         });
     } else {
         form.style.display='none';

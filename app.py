@@ -1487,21 +1487,77 @@ def api_itc_action(row_id):
 
 
 # ---- Vendor Email: send + thread + log ----
-_CONTACT_LINE = "For any concerns or queries, please feel free to contact:\n  @Mahesh Thakur — mahesh.thakur@wiom.in\n  @Tushar Gupta — tushar.gupta@wiom.in\n  @AP — ap@wiom.in"
+_CONTACT_LINE = "For any concerns or queries, please feel free to contact @mahesh.thakur@wiom.in, @tushar.gupta@wiom.in and @ap@wiom.in"
+_DEFAULT_CC    = 'mahesh.thakur@wiom.in, wiomfinance@wiom.in, tushar.gupta@wiom.in, ap@wiom.in'
+_SIGN          = "Regards,\nFinance and Taxation Team\nOmnia Information Private Limited"
+
+_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+def _fmt_period(p):
+    if not p:
+        return ''
+    parts = str(p).split('-')
+    if len(parts) < 2:
+        return p
+    try:
+        return f"{_MONTHS[int(parts[1])-1]}' {parts[0][2:]}"
+    except Exception:
+        return p
+
+def _fmt_date(d):
+    if not d:
+        return '—'
+    s = str(d).strip()[:10]          # e.g. "16-04-2026" or "2026-04-16"
+    parts = s.split('-')
+    if len(parts) == 3:
+        if len(parts[0]) == 4:       # YYYY-MM-DD → flip
+            return f'{parts[2]}-{parts[1]}-{parts[0]}'
+        return s                     # already DD-MM-YYYY
+    try:
+        import pandas as pd
+        return pd.to_datetime(d, dayfirst=True).strftime('%d-%m-%Y')
+    except Exception:
+        return str(d)
+
+def _inv_table(rows_data):
+    """rows_data: list of (inv_no, inv_date_str, amount_float)"""
+    sep = '  ' + '─' * 62
+    hdr = f"\n{sep}\n  {'Sr.':<5} {'Invoice No':<30} {'Date':<14} Amount (₹)\n{sep}"
+    body = '\n'.join(
+        f"  {str(i+1)+'.':<5} {(r[0] or '—'):<30} {_fmt_date(r[1]):<14} {r[2]:,.0f}"
+        for i, r in enumerate(rows_data)
+    )
+    return hdr + '\n' + body + '\n' + sep
 
 EMAIL_TEMPLATES = {
     'not_filed': {
         'subject': 'GST ITC Alert: {vendor} — Invoice(s) not reflecting in GSTR-2B',
-        'body': """Dear {vendor},
+    },
+    'not_received': {
+        'subject': 'GST Invoice Clarification: {vendor} — Invoice in GSTR-2B but not received',
+    },
+    'followup': {
+        'subject': 'Follow-up: {vendor} — GST ITC Mismatch (Invoice {inv})',
+    },
+}
+
+
+def _build_email_body(tpl_key, row, sender_name, note=''):
+    vendor  = row.vendor or 'Vendor'
+    gstin   = row.gstin or ''
+    period  = _fmt_period(row.period)
+    note_ln = f'Note: {note}' if note else ''
+
+    if tpl_key == 'not_filed':
+        table = _inv_table([(row.books_inv or row.gstn_inv, row.books_date or row.gstn_date,
+                             row.books_total or row.gstn_total or 0)])
+        body = f"""Dear M/s {vendor},
 
 Greetings from WIOM!
 
-We have noticed that the following invoice(s) from your side are **not reflecting in our GSTR-2B** for the period {period}:
-
-  • Invoice No: {inv}
-  • Invoice Date: {inv_date}
-  • Invoice Amount: ₹{amount}
-  • GSTIN (yours): {gstin}
+We have noticed that the following invoice(s) from your side are not reflecting in our GSTR-2B for the period {period}:
+{table}
+GSTIN (yours): {gstin}
 
 This is causing an ITC mismatch in our books. Request you to:
 1. Verify whether GSTR-1 has been filed for the above invoice.
@@ -1509,81 +1565,51 @@ This is causing an ITC mismatch in our books. Request you to:
 3. If already filed, please share the acknowledgement/filing date for our records.
 
 Please revert on this email at the earliest to avoid any ITC loss on our side.
+{note_ln}
 
-{note}
+{_CONTACT_LINE}
 
-{contact}
+{_SIGN}
+"""
 
-Regards,
-{sender}
-WIOM — Finance and Taxation Team
-""",
-    },
-    'not_received': {
-        'subject': 'GST Invoice Clarification: {vendor} — Invoice in GSTR-2B but not received',
-        'body': """Dear {vendor},
+    elif tpl_key == 'not_received':
+        table = _inv_table([(row.gstn_inv or row.books_inv, row.gstn_date or row.books_date,
+                             row.gstn_total or row.books_total or 0)])
+        body = f"""Dear M/s {vendor},
 
 Greetings from WIOM!
 
-We observed that an invoice appears in our GSTR-2B for the period {period} but has **not been received / booked in our system**:
-
-  • Invoice No (as per 2B): {inv}
-  • Invoice Date: {inv_date}
-  • Amount (as per 2B): ₹{amount}
-  • GSTIN (yours): {gstin}
+We observed that an invoice appears in our GSTR-2B for the period {period} but has not been received / booked in our system:
+{table}
+GSTIN (yours): {gstin}
 
 Request you to share the original invoice copy at the earliest so we can book it in our records.
+{note_ln}
 
-{note}
+{_CONTACT_LINE}
 
-{contact}
+{_SIGN}
+"""
 
-Regards,
-{sender}
-WIOM — Finance and Taxation Team
-""",
-    },
-    'followup': {
-        'subject': 'Follow-up: {vendor} — GST ITC Mismatch (Invoice {inv})',
-        'body': """Dear {vendor},
+    else:  # followup
+        inv_no = row.books_inv or row.gstn_inv or '—'
+        table = _inv_table([(inv_no, row.books_date or row.gstn_date,
+                             row.books_total or row.gstn_total or 0)])
+        body = f"""Dear M/s {vendor},
 
-This is a follow-up to our earlier email regarding the GST mismatch for:
-
-  • Invoice No: {inv}
-  • Invoice Date: {inv_date}
-  • Period: {period}
-  • GSTIN (yours): {gstin}
+This is a follow-up to our earlier email regarding the GST mismatch for the period {period}:
+{table}
+GSTIN: {gstin}
 
 We have not yet received a response. Request you to kindly revert at the earliest.
+{note_ln}
 
-{note}
+{_CONTACT_LINE}
 
-{contact}
+{_SIGN}
+"""
 
-Regards,
-{sender}
-WIOM — Finance and Taxation Team
-""",
-    },
-}
-
-
-def _build_email_body(tpl_key, row, sender_name, note=''):
-    tpl = EMAIL_TEMPLATES.get(tpl_key, EMAIL_TEMPLATES['not_filed'])
-    inv = row.books_inv or row.gstn_inv or '—'
-    amt = f"{(row.books_total or row.gstn_total or 0):,.0f}"
-    # Invoice date in dd-MM-YYYY format
-    raw_date = row.books_date or row.gstn_date or ''
-    try:
-        from datetime import datetime
-        inv_date = datetime.strptime(str(raw_date), '%Y-%m-%d').strftime('%d-%m-%Y')
-    except Exception:
-        inv_date = raw_date or '—'
-    return tpl['body'].format(
-        vendor=row.vendor or 'Vendor', inv=inv, inv_date=inv_date, amount=amt,
-        gstin=row.gstin or '', period=row.period or '',
-        sender=sender_name, note=f'Note: {note}' if note else '',
-        contact=_CONTACT_LINE)
+    return body
 
 
 def _send_vendor_mail(to, cc, subject, body, in_reply_to=''):
