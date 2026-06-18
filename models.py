@@ -61,16 +61,26 @@ class User(UserMixin, db.Model):
         return self.role == 'superadmin'
 
     @property
+    def is_viewer(self):
+        """View-only admin — sees everything admins see, zero write access."""
+        return self.role == 'viewer'
+
+    @property
+    def can_view_all(self):
+        """True for roles that can see all states and all tabs (admin-level visibility)."""
+        return self.role in ('admin', 'superadmin', 'viewer')
+
+    @property
     def role_display(self):
         return {'user': 'Book-Keeping', 'admin': 'Admin',
-                'superadmin': 'Super Admin'}.get(self.role, self.role)
+                'superadmin': 'Super Admin', 'viewer': 'View Only'}.get(self.role, self.role)
 
     def state_list(self):
         return [s.strip() for s in (self.states or '').split(',') if s.strip()]
 
     def can_see_state(self, state_name):
         sl = self.state_list()
-        return self.is_admin or not sl or state_name in sl
+        return self.can_view_all or not sl or state_name in sl
 
 
 # ----------------------------------------------------------------------
@@ -263,6 +273,28 @@ class RowAttachment(db.Model):
     uploaded_at = db.Column(db.DateTime, default=now_ist)
 
     uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
+
+
+class VendorEmail(db.Model):
+    """Each vendor email sent from this platform (with thread tracking)."""
+    __tablename__ = 'vendor_emails'
+    id = db.Column(db.Integer, primary_key=True)
+    row_id = db.Column(db.Integer, db.ForeignKey('recon_rows.id'), index=True)
+    to_email = db.Column(db.String(300))
+    cc_email = db.Column(db.String(500), default='')
+    subject = db.Column(db.String(500))
+    body = db.Column(db.Text)
+    template_type = db.Column(db.String(40))    # 'not_filed' | 'not_received' | 'followup'
+    message_id = db.Column(db.String(200))      # SMTP Message-ID for threading
+    thread_message_id = db.Column(db.String(200), default='')  # first email's message_id
+    seq = db.Column(db.Integer, default=1)      # 1=first, 2=followup, etc.
+    sent_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    sent_by_name = db.Column(db.String(120))
+    sent_at = db.Column(db.DateTime, default=now_ist, index=True)
+    ok = db.Column(db.Boolean, default=True)
+    error = db.Column(db.Text, default='')
+
+    sent_by = db.relationship('User', foreign_keys=[sent_by_id])
 
 
 class LoginEvent(db.Model):

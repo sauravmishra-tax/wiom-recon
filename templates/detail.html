@@ -43,6 +43,7 @@
 <!-- BULK BAR -->
 <div class="bulkbar" id="bulkbar">
     <span class="selinfo"><span id="selN">0</span> selected</span>
+    {% if not current_user.is_viewer %}
     <select id="bReason" style="width:230px;">
         <option value="">— reason —</option>
         <option>Vendor not filed GSTR-1</option><option>Timing difference (next month)</option>
@@ -57,9 +58,13 @@
     <button class="btn sm green" onclick="bulk('approve')">✓ Approve</button>
     <button class="btn sm green" onclick="bulk('resolve')">✓✓ Resolve</button>
     <button class="btn sm ghost" onclick="bulk('reopen')">↺ Reopen</button>
+    <button class="btn sm" style="background:var(--red);border-color:var(--red);" onclick="bulkReject()">✗ ITC Ineligible</button>
     <span style="border-left:1px solid var(--dark3);padding-left:10px;display:flex;gap:6px;align-items:center;">
         <select id="bAssignee" style="width:160px;"><option value="">— assign to —</option></select>
         <button class="btn sm" onclick="bulk('assign')">👤 Assign</button></span>
+    {% endif %}
+    {% else %}
+    <span style="color:var(--gray);font-size:12px;font-style:italic;">View-only — no actions allowed</span>
     {% endif %}
     <button class="btn sm ghost" onclick="clearSel()">Clear</button>
 </div>
@@ -84,14 +89,21 @@
     <label style="margin-top:12px;">Remark / note</label>
     <textarea id="mRemark" rows="3" placeholder="Explain the difference / action taken…"></textarea>
     <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+        {% if not current_user.is_viewer %}
         <button class="btn sm" onclick="saveRemark()">💾 Save remark</button>
         <button class="btn sm ghost" onclick="doFollowup()">📨 Mark follow-up sent</button>
         {% if is_admin %}
         <button class="btn sm green" onclick="single('approve')">✓ Approve</button>
         <button class="btn sm green" onclick="single('resolve')">✓✓ Resolve</button>
         <button class="btn sm ghost" onclick="single('reopen')">↺ Reopen</button>
+        <button id="mItcRejectBtn" class="btn sm" style="display:none;background:var(--red);border-color:var(--red);" onclick="itcReject()">✗ ITC Ineligible</button>
+        {% endif %}
+        {% else %}
+        <span style="color:var(--gray);font-size:12px;font-style:italic;">👁 View-only access</span>
+        <button id="mItcRejectBtn" style="display:none;"></button>
         {% endif %}
         <button class="btn sm ghost" onclick="loadHistory()">🕓 History</button>
+        <div id="mItcMsg" style="display:inline;font-size:12px;font-weight:600;margin-left:6px;"></div>
     </div>
     <div id="mFollow" style="margin-top:10px;font-size:12px;"></div>
     <!-- comment thread -->
@@ -114,16 +126,79 @@
         </div>
     </div>
     <div id="mHistory" style="margin-top:14px;"></div>
+    <!-- vendor email -->
+    <div style="margin-top:16px;border-top:1px solid var(--dark3);padding-top:12px;" id="mEmailSection">
+        <h3 style="font-size:13px;margin-bottom:8px;">✉️ Vendor Email <span class="muted" style="font-weight:400;" id="mEmailCount"></span></h3>
+        <div id="mEmailThread" style="font-size:12px;max-height:200px;overflow:auto;margin-bottom:12px;"></div>
+        <div id="mEmailForm" style="display:none;background:var(--dark2);border-radius:10px;padding:14px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div><label style="font-size:11px;">To (vendor email)</label>
+                    <input id="mMailTo" placeholder="vendor@example.com" style="font-size:12px;"></div>
+                <div><label style="font-size:11px;">CC <span style="color:var(--gray);font-weight:400;">(comma-separate for multiple: a@x.com, b@x.com)</span></label>
+                    <input id="mMailCc" placeholder="cc1@wiom.in, cc2@wiom.in" style="font-size:12px;"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div><label style="font-size:11px;">Template</label>
+                    <select id="mMailTpl" onchange="previewMailTemplate()" style="font-size:12px;width:100%;">
+                        <option value="not_filed">Invoice not filed in GSTR-1 (vendor hasn't filed)</option>
+                        <option value="not_received">Invoice in GSTR-2B but not received by us</option>
+                        <option value="followup">Follow-up on previous email</option>
+                    </select></div>
+                <div><label style="font-size:11px;">Subject <span style="color:var(--gray);font-weight:400;">(editable)</span></label>
+                    <input id="mMailSubject" style="font-size:12px;width:100%;box-sizing:border-box;"></div>
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:11px;">Email Body <span style="color:var(--gray);font-weight:400;">(exactly what gets sent — edit freely)</span></label>
+                <textarea id="mMailBody" rows="14" style="font-family:monospace;font-size:11px;width:100%;box-sizing:border-box;line-height:1.6;"></textarea>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <button class="btn sm green" onclick="sendVendorEmail()">📤 Send Email</button>
+                <button class="btn sm ghost" onclick="document.getElementById('mEmailForm').style.display='none'">Cancel</button>
+            </div>
+            <div id="mEmailSendMsg" style="font-size:12px;font-weight:600;"></div>
+        </div>
+        <button class="btn sm ghost" onclick="openMailCompose()" id="mEmailComposeBtn">✉️ Compose new email to vendor</button>
+    </div>
   </div>
 </div>
 
 <!-- VENDOR DRILL-DOWN MODAL -->
 <div class="modal-bg" id="vmodal">
-  <div class="card" style="width:90%;max-width:1100px;max-height:88vh;overflow:auto;margin:0;">
+  <div class="card" style="width:92%;max-width:1140px;max-height:90vh;overflow:auto;margin:0;">
     <div style="display:flex;justify-content:space-between;align-items:start;">
         <h2 id="vTitle">Vendor</h2>
-        <span onclick="document.getElementById('vmodal').classList.remove('show')" style="cursor:pointer;color:var(--gray);font-size:24px;line-height:1;">×</span></div>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn sm green" onclick="toggleVendorMailForm()" id="vEmailBtn">✉️ Email this Vendor</button>
+            <span onclick="document.getElementById('vmodal').classList.remove('show')" style="cursor:pointer;color:var(--gray);font-size:24px;line-height:1;">×</span>
+        </div>
+    </div>
     <div id="vSummary" class="muted" style="margin-bottom:12px;"></div>
+
+    <!-- vendor email compose form -->
+    <div id="vEmailForm" style="display:none;background:var(--dark2);border-radius:12px;padding:16px;margin-bottom:16px;">
+        <h3 style="font-size:13px;margin-bottom:12px;">✉️ Compose Vendor Email <span class="muted" style="font-weight:400;" id="vEmailThreadCount"></span></h3>
+        <div id="vEmailThread" style="font-size:12px;max-height:160px;overflow:auto;margin-bottom:12px;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div><label style="font-size:11px;">To (vendor email)</label>
+                <input id="vMailTo" placeholder="vendor@example.com" style="font-size:12px;width:100%;box-sizing:border-box;"></div>
+            <div><label style="font-size:11px;">CC <span style="color:var(--gray);font-weight:400;">(comma-separated)</span></label>
+                <input id="vMailCc" placeholder="cc1@wiom.in, cc2@wiom.in" style="font-size:12px;width:100%;box-sizing:border-box;"></div>
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="font-size:11px;">Subject <span style="color:var(--gray);font-weight:400;">(editable)</span></label>
+            <input id="vMailSubject" style="font-size:12px;width:100%;box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="font-size:11px;">Email Body <span style="color:var(--gray);font-weight:400;">(auto-filled from all mismatch rows — edit freely)</span></label>
+            <textarea id="vMailBody" rows="14" style="font-family:monospace;font-size:11px;width:100%;box-sizing:border-box;line-height:1.6;"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn sm green" onclick="sendVendorLevelEmail()">📤 Send to Vendor</button>
+            <button class="btn sm ghost" onclick="document.getElementById('vEmailForm').style.display='none'">Cancel</button>
+            <span id="vMailSendMsg" style="font-size:12px;font-weight:600;margin-left:8px;"></span>
+        </div>
+    </div>
+
     <div style="overflow:auto;"><table><thead><tr><th>Period</th><th>State</th><th>Category</th><th>Books Inv</th><th>2B Inv</th>
         <th class="num">Books ₹</th><th class="num">2B ₹</th><th class="num">Diff ₹</th><th>Recon Status</th><th>Workflow</th></tr></thead>
         <tbody id="vRows"></tbody></table></div>
@@ -134,6 +209,7 @@
 {% block scripts %}
 <script>
 const isAdmin = {{ 'true' if is_admin else 'false' }};
+const isViewer = {{ 'true' if current_user.is_viewer else 'false' }};
 const fmt=n=>(n==null?0:n).toLocaleString('en-IN',{maximumFractionDigits:0});
 const esc=t=>{const d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML;};
 
@@ -146,6 +222,11 @@ const C_FUP  = {h:'Follow-up', t:'fup'};
 const C_ASSIGN = {h:'Assigned', t:'asgn'};
 const C_ATT  = {h:'📎', t:'att'};
 const TABS = {
+  pending:{label:'⏳ Pending Approvals', api:{status:'remarked'}, sel:true, adminOnly:true, cols:[
+    {k:'books_inv',h:'Books Inv'},{k:'gstn_inv',h:'2B Inv'},{k:'txn_type',h:'Type'},
+    {k:'books_date',h:'Date'},{k:'state_name',h:'State'},{k:'period',h:'Period'},
+    {k:'books_total',h:'Bk Total',t:'n'},{k:'gstn_total',h:'2B Total',t:'n'},{k:'total_diff',h:'Diff',t:'n'},
+    {k:'recon_status',h:'Category',t:'sm'},C_TEAM,C_ATT,C_AGE,C_ASSIGN,C_STAT]},
   cross:{label:'Expert Cross-Match', api:{recon:'cross'}, sel:true, cols:[
     {k:'txn_type',h:'Type'},{k:'books_inv',h:'Books Inv'},{k:'gstn_inv',h:'2B Inv'},{k:'inv_match',h:'Inv✓',t:'m'},
     {k:'books_date',h:'Books Dt'},{k:'gstn_date',h:'2B Dt'},{k:'date_match',h:'Dt✓',t:'m'},
@@ -161,11 +242,16 @@ const TABS = {
     {k:'books_taxable',h:'Taxable',t:'n'},{k:'books_igst',h:'IGST',t:'n'},{k:'books_cgst',h:'CGST',t:'n'},
     {k:'books_sgst',h:'SGST',t:'n'},{k:'books_tax',h:'Total Tax',t:'n'},{k:'books_total',h:'Total Amt',t:'n'},
     C_AGE,{k:'recon_status',h:'Cross Status',t:'sm'},C_TEAM,C_ATT,C_ASSIGN,C_FUP,C_STAT]},
-  gstn:{label:'GSTR-2B Only', api:{category:'gstn_only'}, sel:true, cols:[
+  gstn:{label:'GSTR-2B Only', api:{category:'gstn_only',exclude_rejected:'1'}, sel:true, cols:[
     {k:'gstn_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'gstn_date',h:'Date'},
     {k:'gstn_taxable',h:'Taxable',t:'n'},{k:'gstn_igst',h:'IGST',t:'n'},{k:'gstn_cgst',h:'CGST',t:'n'},
     {k:'gstn_sgst',h:'SGST',t:'n'},{k:'gstn_tax',h:'Total Tax',t:'n'},{k:'gstn_total',h:'Total Amt',t:'n'},
     C_AGE,{k:'recon_status',h:'Cross Status',t:'sm'},C_TEAM,C_ATT,C_ASSIGN,C_FUP,C_STAT]},
+  rejected:{label:'Rejected — ITC Ineligible', api:{recon:'rejected'}, sel:false, cols:[
+    {k:'gstn_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'gstn_date',h:'Date'},
+    {k:'gstn_taxable',h:'Taxable',t:'n'},{k:'gstn_igst',h:'IGST',t:'n'},{k:'gstn_cgst',h:'CGST',t:'n'},
+    {k:'gstn_sgst',h:'SGST',t:'n'},{k:'gstn_tax',h:'Total Tax',t:'n'},{k:'gstn_total',h:'Total Amt',t:'n'},
+    C_TEAM,C_ATT,C_STAT]},
   fully:{label:'Fully Reconciled', api:{recon:'fully'}, sel:true, cols:[
     {k:'books_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'books_date',h:'Date'},
     {k:'books_taxable',h:'Taxable',t:'n'},{k:'books_igst',h:'IGST',t:'n'},{k:'books_cgst',h:'CGST',t:'n'},
@@ -205,9 +291,15 @@ function baseParams(){const p={fy:v('fFy'),period:v('fPeriod'),state:v('fState')
     if(document.getElementById('fMy').checked)p.my='1';return p;}
 
 function buildTabs(counts){
-    document.getElementById('tabs').innerHTML=Object.entries(TABS).map(([k,t])=>
-        `<div class="tab ${k===activeTab?'active':''}" onclick="switchTab('${k}')">${t.label}
-         <span class="cnt">${counts&&counts[k]!=null?counts[k]:'·'}</span></div>`).join('');
+    document.getElementById('tabs').innerHTML=Object.entries(TABS)
+        .filter(([k,t])=>!t.adminOnly||isAdmin||isViewer)
+        .map(([k,t])=>{
+            const cnt=counts&&counts[k]!=null?counts[k]:'·';
+            const urgent=k==='pending'&&cnt>0;
+            return `<div class="tab ${k===activeTab?'active':''}" onclick="switchTab('${k}')"
+                style="${urgent&&k!==activeTab?'border-color:var(--orange);color:var(--orange);':''}">${t.label}
+                <span class="cnt" style="${urgent?'background:var(--orange);color:#000;font-weight:800;':''}">${cnt}</span></div>`;
+        }).join('');
 }
 function switchTab(k){activeTab=k;clearSel();buildTabs(window._counts);load();}
 function reloadAll(){refreshCounts();load();}
@@ -233,7 +325,7 @@ function loadGap(tab){
         renderHead(tab,false);
         const tb=document.getElementById('rows');
         const ident=r=>tab.gv2
-            ?`<td><b>${esc(r.gstin||'—')}</b></td><td style="font-size:11.5px;color:var(--gray-light);max-width:240px;">${esc(r.vendor||'')}</td>`
+            ?`<td><b style="cursor:pointer;border-bottom:1px dashed var(--gray);" onclick="openVendor('${esc(r.gstin)}')" title="View all rows & email vendor">${esc(r.gstin||'—')}</b></td><td style="font-size:11.5px;color:var(--gray-light);max-width:240px;">${esc(r.vendor||'')}</td>`
             :gv(r);
         tb.innerHTML=d.rows.length?d.rows.map((r,i)=>'<tr>'+'<td class="num">'+(i+1)+'</td>'+ident(r)+
             tab.cols.map(c=>cell(r,c)).join('')+'</tr>').join(''):empty(tab);
@@ -294,6 +386,15 @@ function bulk(action){
     fetch('/api/rows/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
         .then(r=>r.json()).then(d=>{if(d.ok){clearSel();document.getElementById('bRemark').value='';load();refreshCounts();}else alert(d.error||'Failed');});
 }
+function bulkReject(){
+    if(!sel.size)return;
+    const reason=prompt(`${sel.size} row(s) ITC Ineligible reject karna chahte ho?\n\nReason daalo (required):\n• RCM applicable\n• Ineligible u/s 17(5)\n• Vendor not GST registered\n• Duplicate invoice\n• Personal expense`,'');
+    if(reason===null)return;
+    if(!reason.trim()){alert('Reason required.');return;}
+    fetch('/api/rows/bulk',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ids:[...sel],action:'reject',reason:reason.trim()})})
+        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();load();refreshCounts();}else alert(d.error||'Failed');});
+}
 
 // single-row modal
 function openRow(id){cur=rowsCache[id];const r=cur;
@@ -314,6 +415,21 @@ function openRow(id){cur=rowsCache[id];const r=cur;
     renderFollow(r);
     loadComments();
     loadAttachments();
+    document.getElementById('mMailTo').value='';
+    document.getElementById('mMailCc').value=_DEFAULT_CC;
+    document.getElementById('mMailSubject').value='';
+    document.getElementById('mMailBody').value='';
+    document.getElementById('mEmailForm').style.display='none';
+    document.getElementById('mEmailSendMsg').textContent='';
+    // show ITC Ineligible button only for gstn_only rows
+    const itcBtn=document.getElementById('mItcRejectBtn');
+    if(itcBtn) itcBtn.style.display=(r.category==='gstn_only')?'inline-flex':'none';
+    const itcMsg=document.getElementById('mItcMsg');
+    if(itcMsg) itcMsg.textContent='';
+    // reset SMTP button state
+    const cb=document.getElementById('mEmailComposeBtn');
+    cb.disabled=false; cb.textContent='✉️ Compose new email to vendor';
+    loadVendorEmails();
     document.getElementById('modal').classList.add('show');}
 function renderFollow(r){
     const el=document.getElementById('mFollow');
@@ -371,6 +487,176 @@ function deleteAttach(id){
     if(!confirm('Delete this attachment?'))return;
     fetch(`/api/attachments/${id}`,{method:'DELETE'}).then(r=>r.json()).then(()=>loadAttachments());
 }
+// ---- email template builder (mirrors Python EMAIL_TEMPLATES) ----
+const _CONTACT = `For any concerns or queries, please feel free to contact: mahesh.thakur@wiom.in, tushar.gupta@wiom.in, ap@wiom.in`;
+const _DEFAULT_CC = 'wiomfinance@wiom.in';
+const _MAIL_TPLS = {
+  not_filed:{
+    subject:r=>`GST ITC Alert: ${r.vendor||r.gstin||'Vendor'} — Invoice(s) not reflecting in GSTR-2B`,
+    body:(r,note,sender)=>`Dear ${r.vendor||'Vendor'},
+
+Greetings from WIOM!
+
+We have noticed that the following invoice(s) from your side are not reflecting in our GSTR-2B for the period ${r.period||''}:
+
+  • Invoice No : ${r.books_inv||r.gstn_inv||'—'}
+  • Invoice Amt: ₹${fmt(r.books_total||r.gstn_total||0)}
+  • GSTIN (yours): ${r.gstin||''}
+
+This is causing an ITC mismatch in our books. Request you to:
+1. Verify whether GSTR-1 has been filed for the above invoice.
+2. If not filed, please file GSTR-1 at the earliest so ITC reflects in next month's GSTR-2B.
+3. If already filed, share the acknowledgement/filing date for our records.
+
+Please revert on this email at the earliest to avoid any ITC loss on our side.
+${note?'\nNote: '+note:''}
+
+${_CONTACT}
+
+Regards,
+${sender}
+WIOM — Accounts & Taxation Team`
+  },
+  not_received:{
+    subject:r=>`GST Invoice Clarification: ${r.vendor||r.gstin||'Vendor'} — Invoice in GSTR-2B but not received`,
+    body:(r,note,sender)=>`Dear ${r.vendor||'Vendor'},
+
+Greetings from WIOM!
+
+We observed that an invoice appears in our GSTR-2B for the period ${r.period||''} but has not been received / booked in our system:
+
+  • Invoice No (as per 2B): ${r.gstn_inv||r.books_inv||'—'}
+  • Amount (as per 2B): ₹${fmt(r.gstn_total||r.books_total||0)}
+  • GSTIN (yours): ${r.gstin||''}
+
+Request you to share the original invoice copy at the earliest so we can book it in our records.
+${note?'\nNote: '+note:''}
+
+${_CONTACT}
+
+Regards,
+${sender}
+WIOM — Accounts & Taxation Team`
+  },
+  followup:{
+    subject:r=>`Follow-up: ${r.vendor||r.gstin||'Vendor'} — GST ITC Mismatch (Invoice ${r.books_inv||r.gstn_inv||''})`,
+    body:(r,note,sender)=>`Dear ${r.vendor||'Vendor'},
+
+This is a follow-up to our earlier email regarding the GST mismatch for:
+
+  • Invoice No: ${r.books_inv||r.gstn_inv||'—'}
+  • Period    : ${r.period||''}
+  • GSTIN     : ${r.gstin||''}
+
+We have not yet received a response. Request you to kindly revert at the earliest.
+${note?'\nNote: '+note:''}
+
+${_CONTACT}
+
+Regards,
+${sender}
+WIOM — Accounts & Taxation Team`
+  },
+};
+function buildVendorMailBody(gstin, vendor, period, rows, note, sender){
+  const booksOnly=rows.filter(r=>r.category==='books_only');
+  const gstnOnly=rows.filter(r=>r.category==='gstn_only');
+  let lines=`Dear ${vendor||'Vendor'},\n\nGreetings from WIOM!\n\nWe are writing regarding GST reconciliation mismatches for your GSTIN ${gstin} for the period ${period||''}.\n`;
+  if(booksOnly.length){
+    lines+=`\nInvoices in our BOOKS but NOT in GSTR-2B (${booksOnly.length} invoice${booksOnly.length>1?'s':''}):\n`;
+    booksOnly.forEach((r,i)=>{lines+=`  ${i+1}. ${r.books_inv||'—'}  Rs.${fmt(r.books_total||0)}  (Date: ${r.books_date||'—'})\n`;});
+    lines+=`\nAction required: Please verify and file GSTR-1 for the above so ITC reflects in our GSTR-2B.\n`;
+  }
+  if(gstnOnly.length){
+    lines+=`\nInvoices in GSTR-2B but NOT received by us (${gstnOnly.length} invoice${gstnOnly.length>1?'s':''}):\n`;
+    gstnOnly.forEach((r,i)=>{lines+=`  ${i+1}. ${r.gstn_inv||'—'}  Rs.${fmt(r.gstn_total||0)}  (Date: ${r.gstn_date||'—'})\n`;});
+    lines+=`\nAction required: Kindly share original invoice copies for the above.\n`;
+  }
+  lines+=`\nPlease revert at the earliest to avoid any ITC loss.\n${note?'\nNote: '+note:''}\n\n${_CONTACT}\n\nRegards,\n${sender}\nWIOM — Accounts & Taxation Team`;
+  return lines;
+}
+function previewMailTemplate(){
+    if(!cur)return;
+    const tpl=document.getElementById('mMailTpl').value;
+    const t=_MAIL_TPLS[tpl]||_MAIL_TPLS.not_filed;
+    document.getElementById('mMailSubject').value=t.subject(cur);
+    document.getElementById('mMailBody').value=t.body(cur,'','[Your Name]');
+}
+function openMailCompose(){
+    document.getElementById('mEmailForm').style.display='block';
+    if(!document.getElementById('mMailSubject').value) previewMailTemplate();
+}
+function loadVendorEmails(){
+    fetch(`/api/row/${cur.id}/vendor-email`).then(r=>r.json()).then(data=>{
+        const el=document.getElementById('mEmailThread');
+        const cnt=document.getElementById('mEmailCount');
+        const toEl=document.getElementById('mMailTo');
+        if(data.vendor_email && !toEl.value) toEl.value=data.vendor_email;
+        const composeBtn=document.getElementById('mEmailComposeBtn');
+        if(!data.smtp_ok){
+            composeBtn.textContent='✉️ Configure SMTP in Settings first';
+            composeBtn.disabled=true;
+        } else {
+            composeBtn.textContent='✉️ Compose new email to vendor';
+            composeBtn.disabled=false;
+        }
+        const thread=data.thread||[];
+        cnt.textContent=thread.length?`(${thread.length} sent)`:'';
+        if(!thread.length){el.innerHTML='<span style="color:var(--gray)">No emails sent yet.</span>';return;}
+        el.innerHTML=renderEmailThread(thread);
+    });
+}
+function renderEmailThread(thread){
+    return thread.map(e=>`
+      <div style="margin-bottom:10px;padding:10px;background:var(--dark2);border-radius:8px;border-left:3px solid ${e.ok?'var(--green)':'var(--negc)'};">
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:4px;">
+          <b style="font-size:12px;">#${e.seq} → ${esc(e.to)}${e.cc?' · CC: '+esc(e.cc):''}</b>
+          <span style="font-size:11px;color:var(--gray);">${e.at} · ${esc(e.by)}</span>
+        </div>
+        <div style="font-size:11px;color:var(--gray-light);margin-bottom:4px;"><b>Sub:</b> ${esc(e.subject)}</div>
+        <div style="font-size:11px;color:${e.ok?'var(--green)':'var(--negc)'};">${e.ok?'✓ Sent':'✗ '+esc(e.error)}</div>
+      </div>`).join('');
+}
+function sendVendorEmail(){
+    const to=document.getElementById('mMailTo').value.trim();
+    const subj=document.getElementById('mMailSubject').value.trim();
+    const body=document.getElementById('mMailBody').value.trim();
+    if(!to){alert('Enter vendor email address.');return;}
+    if(!body){alert('Email body is empty.');return;}
+    const msg=document.getElementById('mEmailSendMsg');
+    msg.style.color='var(--gray-light)';msg.textContent='Sending…';
+    fetch(`/api/row/${cur.id}/vendor-email`,{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+            to,cc:document.getElementById('mMailCc').value.trim(),
+            template:document.getElementById('mMailTpl').value,
+            subject:subj, body
+        })}).then(r=>r.json()).then(d=>{
+        if(d.ok){
+            msg.style.color='var(--green)';msg.textContent=`✓ Email #${d.seq} sent!`;
+            document.getElementById('mEmailForm').style.display='none';
+            cur=d.row;rowsCache[cur.id]=d.row;renderFollow(d.row);
+            loadVendorEmails();load();
+        } else {
+            msg.style.color='var(--negc)';msg.textContent='✗ '+d.error;
+        }
+    });
+}
+function itcReject(){
+    const reason=prompt('Rejection reason (required):\n\nExamples:\n• RCM applicable\n• Ineligible u/s 17(5)\n• Vendor not GST registered\n• Duplicate invoice\n• Personal expense\n• ITC blocked u/r 42/43', '');
+    if(reason===null) return;
+    if(!reason.trim()){alert('Reason is required to reject.');return;}
+    const msg=document.getElementById('mItcMsg');
+    msg.style.color='var(--gray-light)'; msg.textContent='Saving…';
+    fetch(`/api/row/${cur.id}/itc-action`,{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'reject', reason:reason.trim()})}).then(r=>r.json()).then(d=>{
+        if(!d.ok){msg.style.color='var(--red)';msg.textContent='✗ '+d.error;return;}
+        msg.style.color='var(--red)'; msg.textContent='✗ Rejected: '+reason.trim();
+        document.getElementById('mItcRejectBtn').style.display='none';
+        cur=d.row; rowsCache[cur.id]=d.row; renderFollow(d.row); load(); refreshCounts();
+    });
+}
 function loadComments(){fetch(`/api/row/${cur.id}/comments`).then(r=>r.json()).then(cs=>{
     document.getElementById('mComments').innerHTML=cs.length?cs.map(c=>`<div style="margin-bottom:8px;padding:8px 10px;background:var(--dark2);border-radius:8px;">
         <b style="color:var(--pink-light)">${esc(c.user)}</b> <span style="font-size:10px;color:var(--gray)">${esc(c.role)} · ${esc(c.at)}</span><br>${esc(c.text)}</div>`).join(''):'<span style="color:var(--gray)">No comments yet.</span>';});}
@@ -381,8 +667,20 @@ function loadHistory(){fetch(`/api/row/${cur.id}/history`).then(r=>r.json()).the
     document.getElementById('mHistory').innerHTML='<div style="border-top:1px solid var(--dark3);padding-top:10px;font-size:12px;">'+
         (h.length?h.map(x=>`<div style="margin-bottom:6px;"><b style="color:var(--pink-light)">${esc(x.user)}</b> · ${x.action} <span style="color:var(--gray)">${x.at}</span>${x.new?` → <i>${esc(x.new)}</i>`:''}</div>`).join(''):'<span style="color:var(--gray)">No history.</span>')+'</div>';});}
 // vendor drill-down — all rows for a GSTIN across states/months
+let vCurGstin='', vCurRows=[];
 function openVendor(gstin){
+    vCurGstin=gstin;
+    // reset email form
+    document.getElementById('vEmailForm').style.display='none';
+    const vb=document.getElementById('vEmailBtn');
+    vb.disabled=false; vb.textContent='✉️ Email this Vendor';
+    document.getElementById('vMailTo').value='';
+    document.getElementById('vMailCc').value=_DEFAULT_CC;
+    document.getElementById('vMailSubject').value='';
+    document.getElementById('vMailBody').value='';
+    document.getElementById('vMailSendMsg').textContent='';
     fetch(`/api/vendor-rows/${encodeURIComponent(gstin)}`).then(r=>r.json()).then(d=>{
+        vCurRows=d.rows||[];
         document.getElementById('vTitle').textContent=gstin+' · '+(d.vendor||'');
         let bk=0,tb=0;d.rows.forEach(r=>{bk+=r.books_total||0;tb+=r.gstn_total||0;});
         document.getElementById('vSummary').innerHTML=`${d.count} rows across all states/months · Books ₹${fmt(bk)} vs 2B ₹${fmt(tb)} · Gap ₹${fmt(bk-tb)}`;
@@ -394,6 +692,57 @@ function openVendor(gstin){
             <td style="font-size:11px;color:var(--gray-light)">${esc(r.recon_status||'')}</td>
             <td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('')||'<tr><td colspan="10" style="padding:18px;color:var(--gray)">No rows.</td></tr>';
         document.getElementById('vmodal').classList.add('show');
+    });
+}
+function toggleVendorMailForm(){
+    const form=document.getElementById('vEmailForm');
+    if(form.style.display==='none'){
+        form.style.display='block';
+        // load email data + pre-fill
+        fetch(`/api/gstin/${encodeURIComponent(vCurGstin)}/vendor-email`).then(r=>r.json()).then(data=>{
+            if(data.vendor_email) document.getElementById('vMailTo').value=data.vendor_email;
+            const vBtn=document.getElementById('vEmailBtn');
+            if(!data.smtp_ok){
+                vBtn.textContent='✉️ Configure SMTP first'; vBtn.disabled=true;
+            }
+            // render thread
+            const thread=data.thread||[];
+            document.getElementById('vEmailThreadCount').textContent=thread.length?`· ${thread.length} email${thread.length>1?'s':''} sent`:'';
+            document.getElementById('vEmailThread').innerHTML=thread.length?renderEmailThread(thread):'';
+            // pre-fill subject + body from mismatch rows
+            const rows=data.rows||[];
+            const vendor=vCurRows.length?vCurRows[0].vendor||'Vendor':'Vendor';
+            const period=rows.length?rows[0].period||'':'';
+            const sender='WIOM Taxation Team';
+            if(!document.getElementById('vMailSubject').value)
+                document.getElementById('vMailSubject').value=`GST Reconciliation Mismatch — GSTIN ${vCurGstin} (${period})`;
+            if(!document.getElementById('vMailBody').value)
+                document.getElementById('vMailBody').value=buildVendorMailBody(vCurGstin,vendor,period,rows,'',sender);
+        });
+    } else {
+        form.style.display='none';
+    }
+}
+function sendVendorLevelEmail(){
+    const to=document.getElementById('vMailTo').value.trim();
+    const body=document.getElementById('vMailBody').value.trim();
+    if(!to){alert('Enter vendor email address.');return;}
+    if(!body){alert('Email body is empty.');return;}
+    const msg=document.getElementById('vMailSendMsg');
+    msg.style.color='var(--gray-light)';msg.textContent='Sending…';
+    fetch(`/api/gstin/${encodeURIComponent(vCurGstin)}/vendor-email`,{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+            to, cc:document.getElementById('vMailCc').value.trim(),
+            subject:document.getElementById('vMailSubject').value.trim(),
+            body
+        })}).then(r=>r.json()).then(d=>{
+        if(d.ok){
+            msg.style.color='var(--green)';msg.textContent=`✓ Email #${d.seq} sent to ${to}!`;
+            document.getElementById('vEmailForm').style.display='none';
+        } else {
+            msg.style.color='var(--negc)';msg.textContent='✗ '+d.error;
+        }
     });
 }
 function v(id){return document.getElementById(id).value;}

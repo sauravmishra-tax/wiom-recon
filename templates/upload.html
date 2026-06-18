@@ -2,17 +2,22 @@
 {% block title %}New Recon · WIOM{% endblock %}
 {% block content %}
 <div class="page-head"><div><h2>New Reconciliation</h2>
-<div class="sub">Upload one state's Zoho GSTR-recon Excel. Period is auto-detected; data accumulates cumulatively.</div></div></div>
+<div class="sub">Upload a Zoho recon Excel or fetch directly from Zoho Books. Re-uploading the same state+month replaces it (remarks carry over).</div></div></div>
+
 
 <div class="card" id="uploadCard">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <h2 style="margin-bottom:4px;">📁 Upload Recon Excel</h2>
+    <div class="sub" style="margin-bottom:16px;">Upload the Excel exported from Zoho Books GSTR-2B reconciliation page.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
         <div><label>State (which GST registration)</label>
             <select id="state">
                 <option value="">— select state —</option>
                 {% for s in ['Delhi','Haryana','Maharashtra','Uttar Pradesh'] %}<option>{{ s }}</option>{% endfor %}
             </select></div>
+        <div><label>Return month (GSTR-2B period)</label>
+            <input type="month" id="period"></div>
         <div><label>Label (optional)</label>
-            <input type="text" id="label" placeholder="e.g. May 2026 note"></div>
+            <input type="text" id="label" placeholder="e.g. note"></div>
     </div>
     <div style="margin-top:16px;"><label>Recon Excel file (.xlsx)</label>
         <input type="file" id="file" accept=".xlsx,.xls"></div>
@@ -28,7 +33,7 @@
         font-family:ui-monospace,monospace;font-size:11.5px;height:320px;overflow-y:auto;line-height:1.7;"></div>
     <div id="doneRow" style="display:none;margin-top:16px;gap:10px;display:none;">
         <a class="btn green" id="dlBtn">⬇ Download Excel</a>
-        <a class="btn" href="{{ url_for('detail') }}" id="reviewBtn">Review & assign remarks →</a>
+        <a class="btn" href="{{ url_for('detail') }}" id="reviewBtn">Review &amp; assign remarks →</a>
     </div>
     <div id="errRow" style="display:none;margin-top:16px;color:var(--negc);font-weight:600;"></div>
 </div>
@@ -37,14 +42,17 @@
 {% block scripts %}
 <script>
 let poll=null;
+
 function startUpload(){
     const state=document.getElementById('state').value;
+    const period=document.getElementById('period').value;
     const label=document.getElementById('label').value;
     const file=document.getElementById('file').files[0];
     if(!state){alert('Select the state (Delhi / Haryana / Maharashtra / Uttar Pradesh).');return;}
+    if(!period){alert('Select the return month (GSTR-2B period).');return;}
     if(!file){alert('Choose an Excel file.');return;}
     const fd=new FormData();
-    fd.append('file',file); fd.append('label',label); fd.append('state',state);
+    fd.append('file',file); fd.append('label',label); fd.append('state',state); fd.append('period',period);
     document.getElementById('goBtn').disabled=true;
     fetch('/upload',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
         if(d.error){alert(d.error);document.getElementById('goBtn').disabled=false;return;}

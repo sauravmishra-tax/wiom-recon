@@ -25,12 +25,13 @@ sys.path.insert(0, BASE_DIR)
 
 from config import Config
 from models import (db, User, ReconRun, ReconRow, VendorMaster, AuditLog,
-                    Setting, RowComment, RowAttachment, LoginEvent, log_audit,
-                    now_ist, get_setting, set_setting)
-from auth import login_manager, auth_bp, admin_required, superadmin_required
+                    Setting, RowComment, RowAttachment, VendorEmail, LoginEvent,
+                    log_audit, now_ist, get_setting, set_setting)
+from auth import login_manager, auth_bp, admin_required, superadmin_required, write_required
 from persist import persist_run, derive_period, derive_period_from_file
 from state_codes import STATE_CODES, WIOM_STATES
 import zoho
+import slack_notify
 
 from agents import agent_1_validator
 from agents import agent_2_vendor_resolver
@@ -161,6 +162,10 @@ def run_reconciliation(file_path, period, label, user_id, run_state=None):
         try:
             processing_state['active'] = True
             processing_state['start_time'] = time.time()
+            processing_state['state'] = run_state or ''
+            processing_state['period'] = period or ''
+            user_obj = db.session.get(User, user_id)
+            processing_state['uploaded_by'] = user_obj.name if user_obj else 'System'
 
             processing_state['current_agent'] = 'Agent 1: Data Validator'
             processing_state['progress'] = 5
@@ -360,13 +365,111 @@ def detail():
         fys = sorted(set(fys) | {current_fy}, reverse=True)
     return render_template('detail.html', periods=periods, fys=fys,
                            default_fy=current_fy, states=WIOM_STATES,
-                           is_admin=current_user.is_admin)
+                           is_admin=current_user.is_admin,
+                           is_viewer=current_user.is_viewer)
 
 
 @app.route('/upload-page')
 @admin_required
 def upload_page():
-    return render_template('upload.html')
+    zoho_ready = bool(get_setting('zoho_client_id') and get_setting('zoho_refresh_token')
+                      and get_setting('zoho_org_id'))
+    return render_template('upload.html', zoho_ready=zoho_ready)
+
+
+@app.route('/upload/from-zoho', methods=['POST'])
+@admin_required
+def upload_from_zoho():
+    """Fetch GSTR-2B reconciliation data directly from Zoho Books and persist it.
+    No Excel needed — replaces the manual export+upload flow."""
+    import zoho as zoho_mod
+    from persist import persist_run
+    from state_codes import state_from_gstin, code_for_state
+
+    data = request.get_json(force=True)
+    period   = (data.get('period') or '').strip()        # YYYY-MM
+    states   = data.get('states') or []                  # ['Delhi','Haryana',...] or [] for all
+    label    = (data.get('label') or '').strip()
+
+    if not period:
+        return jsonify({'ok': False, 'error': 'Period required (YYYY-MM)'}), 400
+
+    # Load Zoho creds
+    cfg = {k: get_setting(k) for k in ('zoho_client_id', 'zoho_client_secret',
+                                         'zoho_refresh_token', 'zoho_org_id', 'zoho_region')}
+    if not cfg.get('zoho_client_id') or not cfg.get('zoho_refresh_token'):
+        return jsonify({'ok': False, 'error': 'Zoho not configured in Settings.'}), 400
+
+    try:
+        tok = zoho_mod.get_access_token(cfg['zoho_client_id'], cfg['zoho_client_secret'],
+                                         cfg['zoho_refresh_token'], cfg.get('zoho_region', 'in'))
+        gstr2b = zoho_mod.fetch_gstr2b(tok, cfg['zoho_org_id'],
+                                        cfg.get('zoho_region', 'in'), period)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Zoho fetch failed: {e}'}), 500
+
+    # Group all rows by state
+    all_entries = (
+        [(e, 'matched')    for e in gstr2b['matched']]   +
+        [(e, 'books_only') for e in gstr2b['books_only']] +
+        [(e, 'gstn_only')  for e in gstr2b['gstn_only']]  +
+        [(e, 'reconciled') for e in gstr2b['reconciled']]
+    )
+    if not all_entries:
+        return jsonify({'ok': False,
+                        'error': f'No data returned from Zoho for period {period}. '
+                                 f'Available keys: {gstr2b.get("_raw_keys", [])}'}), 400
+
+    # Figure out which states are present
+    state_map = {}   # state_name -> {matched, books_only, gstn_only, reconciled, vendor_map}
+    for e, cat in all_entries:
+        gstin = e.get('GSTIN', '')
+        _, sname = state_from_gstin(gstin)
+        if not sname:
+            sname = 'Unknown'
+        if states and sname not in states:
+            continue
+        if sname not in state_map:
+            state_map[sname] = {'matched': [], 'books_only': [], 'gstn_only': [],
+                                 'reconciled': [], 'vendor_map': {}}
+        state_map[sname][cat].append(e)
+        if e.get('GSTIN') and e.get('Vendor'):
+            state_map[sname]['vendor_map'][e['GSTIN']] = e['Vendor']
+
+    if not state_map:
+        return jsonify({'ok': False, 'error': 'No entries for the selected state(s).'}), 400
+
+    results = []
+    for sname, rows in state_map.items():
+        scode = code_for_state(sname)
+        run = ReconRun(
+            period=period, label=label or f'Zoho import {period}',
+            state=sname, uploaded_by_id=current_user.id)
+        db.session.add(run); db.session.flush()
+
+        inv_matched     = rows['matched'] + rows['reconciled']
+        books_unmatched = rows['books_only']
+        gstn_unmatched  = rows['gstn_only']
+
+        n, carried = persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
+                                 vendor_map=rows['vendor_map'],
+                                 run_state=sname)
+        # Auto-approve already-reconciled rows from Zoho
+        approved = ReconRow.query.filter(
+            ReconRow.run_id == run.id,
+            ReconRow.recon_status.like('%Fully Reconciled%'),
+            ReconRow.status == 'open'
+        ).update({'status': 'approved'}, synchronize_session=False)
+        db.session.commit()
+
+        results.append({'state': sname, 'run_id': run.id, 'rows': n,
+                        'carried': carried, 'auto_approved': approved,
+                        'matched': len(rows['matched']),
+                        'reconciled': len(rows['reconciled']),
+                        'books_only': len(books_unmatched),
+                        'gstn_only': len(gstn_unmatched)})
+
+    return jsonify({'ok': True, 'period': period, 'states': results})
 
 
 # ======================================================================
@@ -764,11 +867,16 @@ def api_rows():
         q = q.filter(ReconRow.category == 'matched',
                      ReconRow.recon_status.like('%Fully Reconciled%'))
     if request.args.get('recon') == 'cross':
-        # engine cross-matches only — exclude Zoho-auto / exact fully-reconciled
         q = q.filter(ReconRow.category == 'matched',
                      ~ReconRow.recon_status.like('%Fully Reconciled%'))
-    if wf_status and wf_status != 'all':
-        q = q.filter(ReconRow.status == wf_status)
+    if request.args.get('recon') == 'rejected':
+        # Rejected tab: always show only rejected, ignore wf_status filter
+        q = q.filter(ReconRow.status == 'rejected')
+    else:
+        if request.args.get('exclude_rejected') == '1':
+            q = q.filter(ReconRow.status != 'rejected')
+        if wf_status and wf_status != 'all':
+            q = q.filter(ReconRow.status == wf_status)
     q = _apply_fy(q, request.args.get('fy'))
     if only_mismatch:
         # everything except cleanly matched + fully reconciled rows
@@ -811,7 +919,7 @@ def _apply_fy(q, fy):
 
 
 @app.route('/api/row/<int:row_id>/remark', methods=['POST'])
-@login_required
+@write_required
 def api_remark(row_id):
     row = db.session.get(ReconRow, row_id)
     if not row:
@@ -876,24 +984,29 @@ def api_counts():
         return q
     def amt(q, col):
         return round(q.with_entities(func.coalesce(func.sum(col), 0)).scalar() or 0)
-    fully_q = base().filter(ReconRow.category == 'matched',
-                            ReconRow.recon_status.like('%Fully Reconciled%'))
-    cross_q = base().filter(ReconRow.category == 'matched',
-                            ~ReconRow.recon_status.like('%Fully Reconciled%'))
-    books_q = base().filter(ReconRow.category == 'books_only')
-    gstn_q = base().filter(ReconRow.category == 'gstn_only')
+    fully_q    = base().filter(ReconRow.category == 'matched',
+                               ReconRow.recon_status.like('%Fully Reconciled%'))
+    cross_q    = base().filter(ReconRow.category == 'matched',
+                               ~ReconRow.recon_status.like('%Fully Reconciled%'))
+    books_q    = base().filter(ReconRow.category == 'books_only', ReconRow.status != 'rejected')
+    gstn_q     = base().filter(ReconRow.category == 'gstn_only',  ReconRow.status != 'rejected')
+    rejected_q = base().filter(ReconRow.status == 'rejected')
+    pending_q  = base().filter(ReconRow.status == 'remarked')
     return jsonify({
         'cross': cross_q.count(),         'cross_amt': amt(cross_q, ReconRow.books_total),
         'books': books_q.count(),         'books_amt': amt(books_q, ReconRow.books_total),
         'gstn': gstn_q.count(),           'gstn_amt': amt(gstn_q, ReconRow.gstn_total),
         'fully': fully_q.count(),         'fully_amt': amt(fully_q, ReconRow.books_total),
+        'rejected': rejected_q.count(),   'rejected_amt': amt(rejected_q, ReconRow.gstn_total),
+        'pending': pending_q.count(),
         'gap': base().with_entities(ReconRow.gstin).distinct().count(),
         'gap_amt': amt(base(), ReconRow.total_diff),
+        'total': base().count(),
     })
 
 
 @app.route('/api/rows/bulk', methods=['POST'])
-@login_required
+@write_required
 def api_bulk():
     """Apply an action to many rows at once.
     remark -> any logged-in user (own states); approve/resolve/reopen -> admin only."""
@@ -922,6 +1035,20 @@ def api_bulk():
             if row.status == 'open':
                 row.status = 'remarked'
             log_audit(row.id, current_user, 'remark', 'team_remark', old, row.team_remark)
+            changed += 1
+    elif action == 'reject':
+        if not current_user.is_admin:
+            abort(403)
+        reason = data.get('reason', '').strip() or 'ITC Ineligible — Rejected'
+        for row in rows:
+            if not current_user.can_see_state(row.state_name):
+                continue
+            old_status = row.status
+            row.status = 'rejected'
+            row.team_reason = reason
+            row.approved_by_id = current_user.id
+            row.approved_at = now_ist()
+            log_audit(row.id, current_user, 'reject', 'status', old_status, 'rejected')
             changed += 1
     elif action in ('approve', 'resolve', 'reopen'):
         if not current_user.is_admin:
@@ -975,18 +1102,42 @@ def _breakdown_data(rows):
         if r.category == 'books_only':
             return (r.books_igst or 0) + (r.books_cgst or 0) + (r.books_sgst or 0)
         return abs(r.total_diff or 0)
-    by_status, by_reason = {}, {}
+    by_status, by_reason, other_breakdown = {}, {}, {}
     for r in rows:
         st = r.status or 'open'
         s = by_status.setdefault(st, {'count': 0, 'value': 0.0})
         s['count'] += 1; s['value'] += amt(r)
         rsn = (r.team_reason or '').strip()
-        if rsn:
+        if rsn and rsn != 'Other':
             d = by_reason.setdefault(rsn, {'count': 0, 'value': 0.0})
             d['count'] += 1; d['value'] += amt(r)
+        else:
+            # "Other" or untagged — break down by system recon_status for visibility
+            sys_key = (r.recon_status or r.category or 'Unknown').strip()
+            # Shorten long auto labels
+            sys_key = sys_key.replace(' (Zoho Auto)', '').replace('GSTIN NOT in ', '').strip()
+            if len(sys_key) > 55:
+                sys_key = sys_key[:52] + '…'
+            bucket = 'Other' if rsn == 'Other' else 'Untagged'
+            ob = other_breakdown.setdefault(bucket, {})
+            od = ob.setdefault(sys_key, {'count': 0, 'value': 0.0})
+            od['count'] += 1; od['value'] += amt(r)
+
+    # Rejected rows: breakdown by team_reason
+    rejected_breakdown = {}
+    for r in rows:
+        if (r.status or '') != 'rejected':
+            continue
+        rsn = (r.team_reason or 'No reason given').strip()
+        d = rejected_breakdown.setdefault(rsn, {'count': 0, 'value': 0.0})
+        d['count'] += 1; d['value'] += amt(r)
+
     rnd = lambda d: {k: {'count': v['count'], 'value': round(v['value'])} for k, v in d.items()}
+    rnd_ob = {bucket: rnd(subs) for bucket, subs in other_breakdown.items()}
     return {'by_status': rnd(by_status),
-            'by_reason': dict(sorted(rnd(by_reason).items(), key=lambda kv: -kv[1]['value']))}
+            'by_reason': dict(sorted(rnd(by_reason).items(), key=lambda kv: -kv[1]['value'])),
+            'other_breakdown': rnd_ob,
+            'rejected_breakdown': dict(sorted(rnd(rejected_breakdown).items(), key=lambda kv: -kv[1]['count']))}
 
 
 @app.route('/api/breakdown')
@@ -1203,7 +1354,7 @@ def api_attachments_get(row_id):
 
 
 @app.route('/api/row/<int:row_id>/attachments', methods=['POST'])
-@login_required
+@write_required
 def api_attachments_post(row_id):
     row = db.session.get(ReconRow, row_id)
     if not row or not current_user.can_see_state(row.state_name):
@@ -1244,7 +1395,7 @@ def api_attachment_view(att_id):
 
 
 @app.route('/api/attachments/<int:att_id>', methods=['DELETE'])
-@login_required
+@write_required
 def api_attachment_delete(att_id):
     att = db.session.get(RowAttachment, att_id)
     if not att:
@@ -1296,6 +1447,363 @@ def api_followup(row_id):
     db.session.commit()
     return jsonify({'ok': True, 'row': row.to_dict(), 'emailed': emailed,
                     'mailto': not (emailed and emailed['ok'])})
+
+
+# ---- Zoho ITC Accept / Reject ----
+@app.route('/api/row/<int:row_id>/itc-action', methods=['POST'])
+@write_required
+def api_itc_action(row_id):
+    """Accept (ITC eligible) or Reject (ITC ineligible) a GSTR-2B row,
+    and optionally sync the action to Zoho Books."""
+    if not current_user.is_admin:
+        abort(403)
+    row = db.session.get(ReconRow, row_id)
+    if not row or not current_user.can_see_state(row.state_name):
+        abort(403)
+    data = request.get_json(force=True)
+    action = data.get('action')  # 'accept' | 'reject' | 'reopen'
+    if action not in ('accept', 'reject', 'reopen'):
+        return jsonify({'ok': False, 'error': 'Invalid action'}), 400
+
+    old_status = row.status
+    if action == 'accept':
+        row.status = 'approved'
+        row.team_reason = row.team_reason or 'ITC Eligible — Accepted'
+        label = 'ITC Accepted'
+    elif action == 'reject':
+        row.status = 'rejected'
+        row.team_reason = data.get('reason') or row.team_reason or 'ITC Ineligible — Rejected'
+        label = 'ITC Rejected'
+    else:
+        row.status = 'open'
+        label = 'Reopened'
+
+    row.approved_by_id = current_user.id
+    row.approved_at = now_ist()
+    log_audit(row.id, current_user, action, 'status', old_status, row.status)
+    db.session.commit()
+    return jsonify({'ok': True, 'action': action, 'label': label,
+                    'zoho_ok': False, 'zoho_msg': '', 'row': row.to_dict()})
+
+
+# ---- Vendor Email: send + thread + log ----
+_CONTACT_LINE = "For any concerns or queries, please feel free to contact: mahesh.thakur@wiom.in, tushar.gupta@wiom.in, ap@wiom.in"
+
+EMAIL_TEMPLATES = {
+    'not_filed': {
+        'subject': 'GST ITC Alert: {vendor} — Invoice(s) not reflecting in GSTR-2B',
+        'body': """Dear {vendor},
+
+Greetings from WIOM!
+
+We have noticed that the following invoice(s) from your side are **not reflecting in our GSTR-2B** for the period {period}:
+
+  • Invoice No: {inv}
+  • Invoice Amount: ₹{amount}
+  • GSTIN (yours): {gstin}
+
+This is causing an ITC mismatch in our books. Request you to:
+1. Verify whether GSTR-1 has been filed for the above invoice.
+2. If not filed, please file GSTR-1 at the earliest so ITC reflects in next month's GSTR-2B.
+3. If already filed, please share the acknowledgement/filing date for our records.
+
+Please revert on this email at the earliest to avoid any ITC loss on our side.
+
+{note}
+
+{contact}
+
+Regards,
+{sender}
+WIOM — Accounts & Taxation Team
+""",
+    },
+    'not_received': {
+        'subject': 'GST Invoice Clarification: {vendor} — Invoice in GSTR-2B but not received',
+        'body': """Dear {vendor},
+
+Greetings from WIOM!
+
+We observed that an invoice appears in our GSTR-2B for the period {period} but has **not been received / booked in our system**:
+
+  • Invoice No (as per 2B): {inv}
+  • Amount (as per 2B): ₹{amount}
+  • GSTIN (yours): {gstin}
+
+Request you to share the original invoice copy at the earliest so we can book it in our records.
+
+{note}
+
+{contact}
+
+Regards,
+{sender}
+WIOM — Accounts & Taxation Team
+""",
+    },
+    'followup': {
+        'subject': 'Follow-up: {vendor} — GST ITC Mismatch (Invoice {inv})',
+        'body': """Dear {vendor},
+
+This is a follow-up to our earlier email regarding the GST mismatch for:
+
+  • Invoice No: {inv}
+  • Period: {period}
+  • GSTIN (yours): {gstin}
+
+We have not yet received a response. Request you to kindly revert at the earliest.
+
+{note}
+
+{contact}
+
+Regards,
+{sender}
+WIOM — Accounts & Taxation Team
+""",
+    },
+}
+
+
+def _build_email_body(tpl_key, row, sender_name, note=''):
+    tpl = EMAIL_TEMPLATES.get(tpl_key, EMAIL_TEMPLATES['not_filed'])
+    inv = row.books_inv or row.gstn_inv or '—'
+    amt = f"{(row.books_total or row.gstn_total or 0):,.0f}"
+    return tpl['body'].format(
+        vendor=row.vendor or 'Vendor', inv=inv, amount=amt,
+        gstin=row.gstin or '', period=row.period or '',
+        sender=sender_name, note=f'Note: {note}' if note else '',
+        contact=_CONTACT_LINE)
+
+
+def _send_vendor_mail(to, cc, subject, body, in_reply_to=''):
+    import smtplib, uuid
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    cfg = _smtp_cfg()
+    if not cfg.get('host') or not cfg.get('user'):
+        return False, 'SMTP not configured', ''
+    msg = MIMEMultipart('alternative')
+    msg_id = f'<wiom-recon-{uuid.uuid4().hex}@wiom.in>'
+    msg['Message-ID'] = msg_id
+    msg['From'] = f"WIOM Recon <{cfg['user']}>"
+    msg['To'] = to
+    if cc:
+        msg['Cc'] = cc
+    msg['Subject'] = subject
+    if in_reply_to:
+        msg['In-Reply-To'] = in_reply_to
+        msg['References'] = in_reply_to
+    plain = body.replace('**', '').replace('•', '-')
+    html = '<pre style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap;">' + \
+           body.replace('**', '<b>').replace('\n', '<br>') + '</pre>'
+    msg.attach(MIMEText(plain, 'plain'))
+    msg.attach(MIMEText(html, 'html'))
+    recipients = [e.strip() for e in (to + ',' + (cc or '')).split(',') if e.strip()]
+    try:
+        port = int(cfg.get('port', 587))
+        if port == 465:
+            s = smtplib.SMTP_SSL(cfg['host'], port, timeout=15)
+        else:
+            s = smtplib.SMTP(cfg['host'], port, timeout=15)
+            s.starttls()
+        s.login(cfg['user'], cfg['password'])
+        s.sendmail(cfg['user'], recipients, msg.as_string())
+        s.quit()
+        return True, 'Sent', msg_id
+    except Exception as e:
+        return False, str(e), msg_id
+
+
+@app.route('/api/row/<int:row_id>/vendor-email', methods=['GET'])
+@login_required
+def api_vendor_email_get(row_id):
+    """Return vendor email address + prior email thread for this row."""
+    row = db.session.get(ReconRow, row_id)
+    if not row or not current_user.can_see_state(row.state_name):
+        abort(403)
+    vm = db.session.get(VendorMaster, row.gstin or '')
+    vendor_email = vm.email if vm else ''
+    emails = VendorEmail.query.filter_by(row_id=row_id).order_by(VendorEmail.sent_at).all()
+    return jsonify({
+        'vendor_email': vendor_email,
+        'smtp_ok': _smtp_configured(),
+        'thread': [{
+            'id': e.id, 'seq': e.seq, 'tpl': e.template_type,
+            'to': e.to_email, 'cc': e.cc_email, 'subject': e.subject,
+            'body': e.body, 'by': e.sent_by_name,
+            'at': e.sent_at.strftime('%d-%b-%Y %H:%M'),
+            'ok': e.ok, 'error': e.error,
+        } for e in emails],
+    })
+
+
+@app.route('/api/row/<int:row_id>/vendor-email', methods=['POST'])
+@write_required
+def api_vendor_email_post(row_id):
+    """Send a vendor email (new or follow-up in same thread)."""
+    row = db.session.get(ReconRow, row_id)
+    if not row or not current_user.can_see_state(row.state_name):
+        abort(403)
+    data = request.get_json(force=True)
+    to_email = (data.get('to') or '').strip()
+    cc_email = (data.get('cc') or '').strip()
+    tpl_key = data.get('template', 'not_filed')
+    note = (data.get('note') or '').strip()
+    custom_body = (data.get('body') or '').strip()
+    custom_subject = (data.get('subject') or '').strip()
+
+    if not to_email:
+        return jsonify({'ok': False, 'error': 'Recipient email required.'}), 400
+
+    # Save vendor email to master if not present
+    vm = db.session.get(VendorMaster, row.gstin or '')
+    if vm and not vm.email and to_email:
+        vm.email = to_email
+        db.session.flush()
+
+    # Build subject + body
+    prior = VendorEmail.query.filter_by(row_id=row_id).order_by(VendorEmail.sent_at).all()
+    seq = len(prior) + 1
+    first = prior[0] if prior else None
+    tpl = EMAIL_TEMPLATES.get(tpl_key, EMAIL_TEMPLATES['not_filed'])
+    inv = row.books_inv or row.gstn_inv or '—'
+    auto_subject = tpl['subject'].format(inv=inv, vendor=row.vendor or row.gstin or 'Vendor')
+    if seq > 1:
+        auto_subject = f'Follow-up #{seq-1}: ' + auto_subject
+    subject = custom_subject or auto_subject
+    body = custom_body or _build_email_body(tpl_key, row, current_user.name, note)
+    in_reply_to = first.message_id if first else ''
+
+    ok, err, msg_id = _send_vendor_mail(to_email, cc_email, subject, body, in_reply_to)
+
+    ve = VendorEmail(
+        row_id=row_id, to_email=to_email, cc_email=cc_email,
+        subject=subject, body=body, template_type=tpl_key,
+        message_id=msg_id,
+        thread_message_id=first.message_id if first else msg_id,
+        seq=seq, sent_by_id=current_user.id, sent_by_name=current_user.name,
+        ok=ok, error=err if not ok else '')
+    db.session.add(ve)
+
+    # Update followup tracking on the row
+    row.followup_at = now_ist()
+    row.followup_by_id = current_user.id
+    row.followup_count = (row.followup_count or 0) + 1
+    row.followup_note = f'Mail #{seq} to {to_email}' + (f' — {note}' if note else '')
+    log_audit(row.id, current_user, 'vendor_email', 'email',
+              '', f'#{seq} → {to_email} ({tpl_key}) ok={ok}')
+    db.session.commit()
+    return jsonify({'ok': ok, 'error': err, 'seq': seq, 'row': row.to_dict()})
+
+
+@app.route('/api/vendor-email-tracker')
+@login_required
+def api_vendor_email_tracker():
+    """Dashboard tracker: rows with vendor emails sent."""
+    q = db.session.query(VendorEmail, ReconRow).join(
+        ReconRow, VendorEmail.row_id == ReconRow.id)
+    if not current_user.is_admin and current_user.state_list():
+        q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
+    # Latest email per row
+    from sqlalchemy import func
+    sub = db.session.query(
+        VendorEmail.row_id,
+        func.max(VendorEmail.sent_at).label('last_at'),
+        func.count(VendorEmail.id).label('cnt')
+    ).group_by(VendorEmail.row_id).subquery()
+    rows = db.session.query(ReconRow, sub.c.last_at, sub.c.cnt).join(
+        sub, ReconRow.id == sub.c.row_id).order_by(sub.c.last_at.desc()).limit(200).all()
+    return jsonify([{
+        'id': r.id, 'gstin': r.gstin, 'vendor': r.vendor,
+        'inv': r.books_inv or r.gstn_inv or '—',
+        'state': r.state_name, 'period': r.period,
+        'status': r.status, 'mail_count': cnt,
+        'last_mail': last_at.strftime('%d-%b-%Y %H:%M') if last_at else '',
+        'recon_status': r.recon_status,
+    } for r, last_at, cnt in rows])
+
+
+@app.route('/api/gstin/<gstin>/vendor-email', methods=['GET'])
+@login_required
+def api_gstin_vendor_email_get(gstin):
+    """Return vendor email + all their problematic rows + email thread (any row of this GSTIN)."""
+    vm = db.session.get(VendorMaster, gstin.strip())
+    vendor_email = vm.email if vm else ''
+    rows = ReconRow.query.filter(ReconRow.gstin == gstin.strip(),
+                                 ReconRow.category != 'matched').order_by(ReconRow.period).all()
+    # Email history: any VendorEmail linked to any row of this GSTIN
+    row_ids = [r.id for r in ReconRow.query.filter(ReconRow.gstin == gstin.strip()).with_entities(ReconRow.id).all()]
+    emails = VendorEmail.query.filter(VendorEmail.row_id.in_(row_ids)).order_by(VendorEmail.sent_at).all() if row_ids else []
+    return jsonify({
+        'vendor_email': vendor_email,
+        'smtp_ok': _smtp_configured(),
+        'rows': [{'id': r.id, 'category': r.category, 'period': r.period,
+                  'books_inv': r.books_inv, 'gstn_inv': r.gstn_inv,
+                  'books_date': r.books_date, 'gstn_date': r.gstn_date,
+                  'books_total': r.books_total or 0, 'gstn_total': r.gstn_total or 0,
+                  'recon_status': r.recon_status} for r in rows],
+        'thread': [{'id': e.id, 'seq': e.seq, 'tpl': e.template_type,
+                    'to': e.to_email, 'cc': e.cc_email, 'subject': e.subject,
+                    'body': e.body, 'by': e.sent_by_name,
+                    'at': e.sent_at.strftime('%d-%b-%Y %H:%M'),
+                    'ok': e.ok, 'error': e.error} for e in emails],
+    })
+
+
+@app.route('/api/gstin/<gstin>/vendor-email', methods=['POST'])
+@write_required
+def api_gstin_vendor_email_post(gstin):
+    """Send a vendor-level email covering ALL their mismatched invoices for a GSTIN."""
+    gstin = gstin.strip()
+    data = request.get_json(force=True)
+    to_email = (data.get('to') or '').strip()
+    cc_email = (data.get('cc') or '').strip()
+    custom_subject = (data.get('subject') or '').strip()
+    custom_body = (data.get('body') or '').strip()
+
+    if not to_email:
+        return jsonify({'ok': False, 'error': 'Recipient email required.'}), 400
+
+    vm = db.session.get(VendorMaster, gstin)
+    if vm and not vm.email and to_email:
+        vm.email = to_email
+        db.session.flush()
+
+    # All mismatch rows for this GSTIN
+    mismatch_rows = ReconRow.query.filter(ReconRow.gstin == gstin,
+                                          ReconRow.category != 'matched').order_by(ReconRow.period).all()
+    if not mismatch_rows:
+        return jsonify({'ok': False, 'error': 'No mismatch rows found for this GSTIN.'}), 400
+
+    # Email thread: any prior emails for any row of this GSTIN
+    row_ids_all = [r.id for r in ReconRow.query.filter(ReconRow.gstin == gstin).with_entities(ReconRow.id).all()]
+    prior = VendorEmail.query.filter(VendorEmail.row_id.in_(row_ids_all)).order_by(VendorEmail.sent_at).all() if row_ids_all else []
+    seq = len(prior) + 1
+    first = prior[0] if prior else None
+    in_reply_to = first.message_id if first else ''
+
+    vendor_name = (vm.name if vm else None) or (mismatch_rows[0].vendor if mismatch_rows else '') or gstin
+    period = mismatch_rows[0].period if mismatch_rows else ''
+    subject = custom_subject or f'GST Reconciliation Mismatch — {vendor_name} ({period})'
+    body = custom_body
+
+    ok, err, msg_id = _send_vendor_mail(to_email, cc_email, subject, body, in_reply_to)
+
+    # Log VendorEmail against first mismatch row
+    ref_row = mismatch_rows[0]
+    ve = VendorEmail(
+        row_id=ref_row.id, to_email=to_email, cc_email=cc_email,
+        subject=subject, body=body, template_type='vendor_level',
+        message_id=msg_id,
+        thread_message_id=first.message_id if first else msg_id,
+        seq=seq, sent_by_id=current_user.id, sent_by_name=current_user.name,
+        ok=ok, error=err if not ok else '')
+    db.session.add(ve)
+    log_audit(ref_row.id, current_user, 'vendor_email', 'email',
+              '', f'Vendor-level #{seq} → {to_email} ({len(mismatch_rows)} rows) ok={ok}')
+    db.session.commit()
+    return jsonify({'ok': ok, 'error': err, 'seq': seq})
 
 
 # ---- Feature 5: vendor drill-down (all rows for a GSTIN, all states/months) ----
@@ -1509,6 +2017,14 @@ def _summary_stats(user):
 
 
 if __name__ == '__main__':
+    # Daily Slack summary at 7:00 AM IST
+    from apscheduler.schedulers.background import BackgroundScheduler
+    import pytz
+    scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Kolkata'))
+    scheduler.add_job(slack_notify.notify_pending_summary, 'cron', hour=7,  minute=0)
+    scheduler.add_job(slack_notify.notify_cfo_summary,     'cron', hour=19, minute=0)
+    scheduler.start()
+
     # Optional port override from CLI (used by the preview launcher)
     port = Config.PORT
     if len(sys.argv) > 1 and sys.argv[1].isdigit():

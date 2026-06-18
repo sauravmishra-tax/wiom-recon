@@ -20,7 +20,8 @@
 
 <div class="card">
     <h2>🧾 Reconciliation Summary <span class="muted" style="font-weight:500;">— click a tile to open that tab</span></h2>
-    <div id="catSummary" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
+    <div id="totalBar" style="display:flex;gap:0;border-radius:10px;overflow:hidden;height:36px;margin-bottom:14px;font-size:12px;font-weight:700;"></div>
+    <div id="catSummary" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;">
         <div style="color:var(--gray);padding:8px;">Loading…</div>
     </div>
 </div>
@@ -53,6 +54,16 @@
 </div>
 
 <div class="card">
+    <h2>🚫 Rejected — ITC Ineligible <span class="muted" style="font-weight:400;">— reason-wise summary</span></h2>
+    <div id="rejectedCard"><span style="color:var(--gray)">Loading…</span></div>
+</div>
+
+<div class="card">
+    <h2>✉️ Vendor Email Tracker <span class="muted" style="font-weight:400;">— rows with emails sent to vendors</span></h2>
+    <div id="mailTracker"><span style="color:var(--gray)">Loading…</span></div>
+</div>
+
+<div class="card">
     <h2>🗂️ Recent Monthly Runs</h2>
     <table>
         <thead><tr><th>Period</th><th>Label</th><th>Rows</th><th>Uploaded by</th><th>When</th><th></th></tr></thead>
@@ -77,12 +88,27 @@ const css=k=>getComputedStyle(document.documentElement).getPropertyValue(k).trim
 const fmt=n=>(n||0).toLocaleString('en-IN',{maximumFractionDigits:0});
 
 fetch('/api/counts').then(r=>r.json()).then(c=>{
+    // ----- total stacked bar -----
+    const total=c.total||1;
+    const segments=[
+        {label:'Not in Books',v:c.books,col:'var(--pink)'},
+        {label:'Not in GSTR-2B',v:c.gstn,col:'var(--blue)'},
+        {label:'Fully Reconciled',v:c.fully,col:'var(--green)'},
+        {label:'Rejected',v:c.rejected||0,col:'var(--red)'},
+        {label:'Other',v:Math.max(0,total-c.books-c.gstn-c.fully-(c.rejected||0)),col:'var(--dark3)'},
+    ];
+    document.getElementById('totalBar').innerHTML=segments.filter(s=>s.v>0).map(s=>{
+        const pct=(s.v/total*100).toFixed(1);
+        return `<div title="${s.label}: ${fmt(s.v)} (${pct}%)" style="width:${pct}%;background:${s.col};display:flex;align-items:center;justify-content:center;color:#fff;overflow:hidden;white-space:nowrap;font-size:11px;padding:0 4px;">${pct>6?s.label+' '+fmt(s.v):''}</div>`;
+    }).join('')+`<div style="margin-left:auto;padding:0 10px;background:var(--dark2);display:flex;align-items:center;white-space:nowrap;font-size:12px;">Total <b style="margin-left:6px;">${fmt(total)}</b></div>`;
+
     // ----- category summary tiles (click -> detail tab) -----
     const tiles=[
         {k:'cross',label:'Expert Cross-Match',v:c.cross,amt:c.cross_amt,al:'Books value',col:'var(--green)',ic:'🔗'},
         {k:'books',label:'Books Only',v:c.books,amt:c.books_amt,al:'In books, ITC at risk',col:'var(--pink)',ic:'📕'},
         {k:'gstn',label:'GSTR-2B Only',v:c.gstn,amt:c.gstn_amt,al:'In 2B, unbooked',col:'var(--blue)',ic:'🧾'},
         {k:'fully',label:'Fully Reconciled',v:c.fully,amt:c.fully_amt,al:'ITC safe',col:'var(--green)',ic:'✅'},
+        {k:'rejected',label:'Rejected — ITC Ineligible',v:c.rejected||0,amt:c.rejected_amt||0,al:'Marked ineligible',col:'var(--red)',ic:'🚫'},
         {k:'gap',label:'GSTIN Gap Analysis',v:c.gap,amt:c.gap_amt,al:'Net Books−2B gap',col:'var(--orange)',ic:'📊'},
     ];
     document.getElementById('catSummary').innerHTML=tiles.map(t=>
@@ -133,9 +159,55 @@ fetch('/api/breakdown').then(r=>r.json()).then(b=>{
     const st=Object.entries(b.by_status).sort((a,c)=>c[1].value-a[1].value);
     document.querySelector('#byStatus tbody').innerHTML = st.length?st.map(([k,v])=>
         `<tr><td><span class="pill ${pill[k]||'open'}">${k}</span></td><td class="num">${v.count} rows</td><td class="num neg">₹${fmt(v.value)}</td></tr>`).join(''):'<tr><td style="color:var(--gray)">No data.</td></tr>';
-    const rs=Object.entries(b.by_reason);
-    document.querySelector('#byReason tbody').innerHTML = rs.length?rs.map(([k,v])=>
-        `<tr><td>${k}</td><td class="num">${v.count}</td><td class="num neg">₹${fmt(v.value)}</td></tr>`).join(''):'<tr><td style="color:var(--gray)">No reasons assigned yet — team will tag rows (RCM, ineligible, timing…).</td></tr>';
+    const rs=Object.entries(b.by_reason||{});
+    const ob=b.other_breakdown||{};
+    let reasonRows=rs.length?rs.map(([k,v])=>
+        `<tr><td>${k}</td><td class="num">${v.count}</td><td class="num neg">₹${fmt(v.value)}</td></tr>`).join(''):'';
+    // Render "Other" + "Untagged" with sub-breakdown by system status
+    ['Other','Untagged'].forEach(bucket=>{
+        if(!ob[bucket]) return;
+        const subs=Object.entries(ob[bucket]).sort((a,c)=>c[1].count-a[1].count);
+        const total=subs.reduce((s,[,v])=>s+v.count,0);
+        const totalAmt=subs.reduce((s,[,v])=>s+v.value,0);
+        reasonRows+=`<tr style="background:var(--dark2);"><td style="font-weight:700;color:var(--gray-light);">${bucket}</td><td class="num">${total}</td><td class="num neg">₹${fmt(totalAmt)}</td></tr>`;
+        reasonRows+=subs.map(([k,v])=>`<tr><td style="padding-left:22px;font-size:11.5px;color:var(--gray-light);">↳ ${k}</td><td class="num" style="font-size:11.5px;">${v.count}</td><td class="num neg" style="font-size:11.5px;">₹${fmt(v.value)}</td></tr>`).join('');
+    });
+    document.querySelector('#byReason tbody').innerHTML = reasonRows||'<tr><td style="color:var(--gray)">No reasons assigned yet — team will tag rows (RCM, ineligible, timing…).</td></tr>';
+});
+
+fetch('/api/breakdown').then(r=>r.json()).then(b=>{
+    const rb=b.rejected_breakdown||{};
+    const el=document.getElementById('rejectedCard');
+    const entries=Object.entries(rb);
+    if(!entries.length){el.innerHTML='<span style="color:var(--gray)">No rejected rows yet.</span>';return;}
+    const total=entries.reduce((s,[,v])=>s+v.count,0);
+    const totalAmt=entries.reduce((s,[,v])=>s+v.value,0);
+    el.innerHTML=`<div style="margin-bottom:10px;font-size:13px;">Total rejected: <b style="color:var(--red)">${fmt(total)} invoices</b> &nbsp;·&nbsp; ₹${fmt(totalAmt)} ITC at stake</div>`
+    +`<table><thead><tr><th>Reason</th><th class="num">Invoices</th><th class="num">ITC Amount (₹)</th><th class="num">% of Rejected</th></tr></thead><tbody>`
+    +entries.map(([k,v])=>`<tr>
+        <td>${k}</td>
+        <td class="num"><b style="color:var(--red)">${v.count}</b></td>
+        <td class="num neg">₹${fmt(v.value)}</td>
+        <td class="num" style="color:var(--gray-light)">${(v.count/total*100).toFixed(1)}%</td>
+    </tr>`).join('')
+    +'</tbody></table>';
+});
+
+fetch('/api/vendor-email-tracker').then(r=>r.json()).then(rows=>{
+    const el=document.getElementById('mailTracker');
+    if(!rows.length){el.innerHTML='<span style="color:var(--gray)">No vendor emails sent yet.</span>';return;}
+    const pillMap={open:'open',remarked:'remarked',approved:'approved',resolved:'approved'};
+    el.innerHTML=`<div style="overflow:auto;"><table>
+      <thead><tr><th>Vendor / GSTIN</th><th>Invoice</th><th>State</th><th>Period</th><th>Emails Sent</th><th>Last Email</th><th>Status</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><b>${r.vendor||'—'}</b><br><span class="muted" style="font-size:11px;">${r.gstin||''}</span></td>
+        <td>${r.inv||'—'}</td>
+        <td>${r.state||'—'}</td>
+        <td>${r.period||'—'}</td>
+        <td style="text-align:center;"><span style="background:rgba(59,155,255,.18);color:var(--blue);border-radius:12px;padding:2px 10px;font-weight:700;">✉️ ${r.mail_count}</span></td>
+        <td>${r.last_mail||'—'}</td>
+        <td><span class="pill ${pillMap[r.status]||'open'}">${r.status}</span></td>
+      </tr>`).join('')}</tbody></table></div>`;
 });
 
 fetch('/api/trend').then(r=>r.json()).then(t=>{

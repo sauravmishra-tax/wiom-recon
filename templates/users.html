@@ -9,6 +9,7 @@
         <span><span class="badge user">Book-Keeping</span> &nbsp;remarks &amp; reasons</span>
         <span><span class="badge admin">Admin</span> &nbsp;+ approve / resolve · upload · audit</span>
         <span><span class="badge superadmin">Super Admin</span> &nbsp;+ manage team · Zoho settings</span>
+        <span><span class="badge" style="background:var(--dark3);color:var(--gray-light);border:1px solid var(--dark3);">View Only</span> &nbsp;see everything · zero edit access</span>
     </div>
 </div>
 
@@ -23,7 +24,8 @@
             <div><label>Role (rights)</label><select name="role">
                 <option value="user">Book-Keeping (writes remarks)</option>
                 <option value="admin">Admin (approves · uploads · audit)</option>
-                <option value="superadmin">Super Admin (manages team &amp; settings)</option></select></div>
+                <option value="superadmin">Super Admin (manages team &amp; settings)</option>
+                <option value="viewer">View Only (read-only access)</option></select></div>
             <div><label>States (comma-separated, blank = all 4)</label>
                 <input name="states" placeholder="blank = all states"></div>
         </div>
@@ -56,7 +58,8 @@
                 <div><label>Role</label><select name="role">
                     <option value="user" {{ 'selected' if u.role=='user' }}>Book-Keeping</option>
                     <option value="admin" {{ 'selected' if u.role=='admin' }}>Admin</option>
-                    <option value="superadmin" {{ 'selected' if u.role=='superadmin' }}>Super Admin</option></select></div>
+                    <option value="superadmin" {{ 'selected' if u.role=='superadmin' }}>Super Admin</option>
+                    <option value="viewer" {{ 'selected' if u.role=='viewer' }}>View Only</option></select></div>
                 <div><label>States</label><input name="states" value="{{ u.states }}" placeholder="blank = all"></div>
                 <div><label>Reset password</label><input name="password" placeholder="blank = keep"></div>
                 <div><label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" name="active" style="width:auto;" {{ 'checked' if u.active }}> Active</label>

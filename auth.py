@@ -47,6 +47,18 @@ def superadmin_required(f):
     return wrapper
 
 
+def write_required(f):
+    """Block viewer role from any write/action route."""
+    @wraps(f)
+    @login_required
+    def wrapper(*args, **kwargs):
+        if current_user.is_viewer:
+            from flask import jsonify
+            return jsonify(ok=False, error='View-only access — no actions allowed.'), 403
+        return f(*args, **kwargs)
+    return wrapper
+
+
 def _safe_next(nxt):
     """Only allow same-origin relative redirect targets (prevents open redirect)."""
     if not nxt or not nxt.startswith('/') or nxt.startswith('//'):
@@ -101,7 +113,7 @@ def logout():
 # ----------------------------------------------------------------------
 # USER MANAGEMENT (super admin only)
 # ----------------------------------------------------------------------
-VALID_ROLES = ('user', 'admin', 'superadmin')
+VALID_ROLES = ('user', 'admin', 'superadmin', 'viewer')
 
 
 @auth_bp.route('/users')
