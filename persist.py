@@ -203,16 +203,18 @@ def persist_reconciled_df(run, df, vendor_map, run_state=None, run_state_code=No
 
 
 def _build_carry_map(run, run_state):
-    """From prior run(s) for the SAME period+state, map invoice-key -> the row's
-    workflow state (remarks/reason/status/approval/follow-up/assignment). Returns
-    (carry_map, prior_run_ids)."""
-    prior = ReconRun.query.filter(ReconRun.period == run.period,
-                                  ReconRun.state == (run_state or ''),
+    """Find ALL prior runs for the same STATE (any period) and build a carry map.
+    Each upload is cumulative (May file = Apr+May data), so new upload replaces
+    the entire state snapshot. Remarks from the old rows are carried to matching
+    invoices in the new upload so the team never has to re-enter them.
+    Returns (carry_map, prior_run_ids)."""
+    prior = ReconRun.query.filter(ReconRun.state == (run_state or ''),
                                   ReconRun.id != run.id).all()
     prior_ids = [p.id for p in prior]
     carry = {}
     if prior_ids:
         for old in ReconRow.query.filter(ReconRow.run_id.in_(prior_ids)).all():
+            # Only carry rows that team has actually worked on (skip pristine open rows)
             touched = (old.team_remark or old.team_reason or old.status != 'open'
                        or old.assigned_to_id or (old.followup_count or 0) > 0)
             if touched:
@@ -220,41 +222,17 @@ def _build_carry_map(run, run_state):
     return carry, prior_ids
 
 
-def _build_cross_period_seen(run_state, current_run_id):
-    """Return a set of (gstin, norm_inv) tuples already persisted for this state
-    in OTHER periods. Used to deduplicate GSTR-2B carry-forward invoices that
-    naturally re-appear in the next month's return."""
-    seen = set()
-    if not run_state:
-        return seen
-    rows = (ReconRow.query
-            .join(ReconRun, ReconRow.run_id == ReconRun.id)
-            .filter(ReconRow.state_name == run_state,
-                    ReconRow.run_id != current_run_id)
-            .with_entities(ReconRow.gstin, ReconRow.books_inv, ReconRow.gstn_inv)
-            .all())
-    for gstin, b_inv, g_inv in rows:
-        inv = (b_inv or '').strip() or (g_inv or '').strip()
-        if gstin and inv:
-            seen.add((gstin.strip(), inv.upper()))
-    return seen
-
-
-def _inv_key_for_row(row):
-    """Canonical invoice key for cross-period dedup check."""
-    inv = (row.books_inv or '').strip() or (row.gstn_inv or '').strip()
-    return ((row.gstin or '').strip(), inv.upper()) if inv else None
-
-
 def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
                 vendor_map=None, gst_cache=None, run_state=None,
                 reconciled_dfs=None):
     """Write all engine rows into the DB for this run. Returns (row_count, carried).
-    Smart re-upload: if a prior run exists for the same period+state, its remarks/
-    reasons/status/approval/follow-up/assignment/comments are carried over to matching
-    invoices, then the old snapshot is replaced (no duplicates).
-    Cross-period dedup: invoices already reconciled in an earlier period for the same
-    state are skipped (GSTR-2B naturally carries forward late-filed prior-month bills)."""
+
+    Cumulative re-upload logic:
+      Each state's upload is cumulative (e.g. May file = Apr+May data). When a new
+      file is uploaded for a state, ALL previous runs for that state (any period) are
+      replaced with the fresh snapshot. Team remarks/reasons/status/assignment/comments
+      are carried over to matching invoices so no rework is needed.
+    """
     if vendor_map:
         sync_vendor_master(vendor_map, gst_cache)
 
@@ -263,35 +241,19 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
 
     carry, prior_ids = _build_carry_map(run, run_state)
 
-    # Cross-period dedup: skip invoices already stored for this state in other periods.
-    # GSTR-2B naturally re-includes prior-month late-filed bills; we must not duplicate them.
-    cross_seen = _build_cross_period_seen(run_state, run.id)
-    skipped = 0
-
-    def _safe_add(row):
-        nonlocal n, skipped
-        k = _inv_key_for_row(row)
-        if k and k in cross_seen:
-            skipped += 1
-            return
-        if k:
-            cross_seen.add(k)
-        db.session.add(row)
-        n += 1
-
     n = 0
     for m in (inv_matched or []):
-        _safe_add(_make_row(run, m, 'matched', run_state, rs_code))
+        db.session.add(_make_row(run, m, 'matched', run_state, rs_code)); n += 1
     for m in (books_unmatched or []):
-        _safe_add(_make_row(run, m, 'books_only', run_state, rs_code))
+        db.session.add(_make_row(run, m, 'books_only', run_state, rs_code)); n += 1
     for m in (gstn_unmatched or []):
-        _safe_add(_make_row(run, m, 'gstn_only', run_state, rs_code))
+        db.session.add(_make_row(run, m, 'gstn_only', run_state, rs_code)); n += 1
     for df in (reconciled_dfs or []):
         n += persist_reconciled_df(run, df, vendor_map, run_state, rs_code)
 
     db.session.flush()  # assign ids to the new rows
 
-    # ---- carry over workflow state from the prior snapshot to matching invoices ----
+    # ---- carry over workflow state from ALL prior state snapshots ----
     carried = 0
     if carry:
         for row in ReconRow.query.filter_by(run_id=run.id).all():
@@ -312,7 +274,7 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
                     text=c.text, created_at=c.created_at))
             carried += 1
 
-    # ---- replace the old snapshot: delete prior runs + their rows/comments/audit ----
+    # ---- replace entire state snapshot: delete ALL prior state runs ----
     if prior_ids:
         old_row_ids = [r.id for r in ReconRow.query
                        .filter(ReconRow.run_id.in_(prior_ids)).all()]

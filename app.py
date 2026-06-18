@@ -28,7 +28,7 @@ from models import (db, User, ReconRun, ReconRow, VendorMaster, AuditLog,
                     Setting, RowComment, LoginEvent, log_audit, now_ist,
                     get_setting, set_setting)
 from auth import login_manager, auth_bp, admin_required, superadmin_required
-from persist import persist_run, derive_period
+from persist import persist_run, derive_period, derive_period_from_file
 from state_codes import STATE_CODES, WIOM_STATES
 import zoho
 
@@ -178,11 +178,14 @@ def run_reconciliation(file_path, period, label, user_id, run_state=None):
                 'status': r3['status'], 'checks': r3['checks'], 'stats': r3['stats']}
             processing_state['progress'] = 55
 
-            # Auto-detect the reconciliation period from the data (no manual input)
+            # Period comes from the user's month pick at upload. Only auto-detect
+            # (from invoice dates) as a fallback if none was provided.
             if not period:
                 period = derive_period(r3['inv_matched'], r3['books_unmatched'],
                                        r3['gstn_unmatched'])
                 add_log(0, f'Auto-detected period from invoice dates: {period}')
+            else:
+                add_log(0, f'Reconciliation period (selected): {period}')
 
             processing_state['current_agent'] = 'Agent 4: ITC Risk Analyzer'
             processing_state['progress'] = 60
@@ -337,8 +340,13 @@ def _fy_list(periods):
 @login_required
 def detail():
     periods = _distinct_periods()
-    return render_template('detail.html', periods=periods, fys=_fy_list(periods),
-                           states=WIOM_STATES,
+    fys = _fy_list(periods)
+    now = now_ist()
+    current_fy = now.year if now.month >= 4 else now.year - 1   # India FY (Apr–Mar)
+    if current_fy not in fys:
+        fys = sorted(set(fys) | {current_fy}, reverse=True)
+    return render_template('detail.html', periods=periods, fys=fys,
+                           default_fy=current_fy, states=WIOM_STATES,
                            is_admin=current_user.is_admin)
 
 
@@ -659,11 +667,14 @@ def upload():
     if processing_state['active']:
         return jsonify({'error': 'A reconciliation is already running.'}), 400
 
-    # Period is auto-detected from the data inside the engine — no manual input.
     label = request.form.get('label', '').strip()
     run_state = request.form.get('state', '').strip()
+    period = request.form.get('period', '').strip()  # 'YYYY-MM' from the month picker
     if run_state not in WIOM_STATES:
         return jsonify({'error': 'Select a valid state (Delhi / Haryana / Maharashtra / Uttar Pradesh).'}), 400
+    import re as _re
+    if not _re.match(r'^\d{4}-\d{2}$', period):
+        return jsonify({'error': 'Select the return month (period).'}), 400
 
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
@@ -679,9 +690,9 @@ def upload():
     file.save(filepath)
 
     reset_state()
-    add_log(0, f'File uploaded for {run_state}: {filename}')
+    add_log(0, f'File uploaded for {run_state} ({period}): {filename}')
     threading.Thread(target=run_reconciliation,
-                     args=(filepath, None, label, current_user.id, run_state),
+                     args=(filepath, period, label, current_user.id, run_state),
                      daemon=True).start()
     return jsonify({'status': 'started', 'filename': filename})
 
@@ -739,6 +750,10 @@ def api_rows():
     if request.args.get('recon') == 'fully':
         q = q.filter(ReconRow.category == 'matched',
                      ReconRow.recon_status.like('%Fully Reconciled%'))
+    if request.args.get('recon') == 'cross':
+        # engine cross-matches only — exclude Zoho-auto / exact fully-reconciled
+        q = q.filter(ReconRow.category == 'matched',
+                     ~ReconRow.recon_status.like('%Fully Reconciled%'))
     if wf_status and wf_status != 'all':
         q = q.filter(ReconRow.status == wf_status)
     q = _apply_fy(q, request.args.get('fy'))
@@ -843,13 +858,14 @@ def api_counts():
         return q
     def amt(q, col):
         return round(q.with_entities(func.coalesce(func.sum(col), 0)).scalar() or 0)
-    matched_q = base().filter(ReconRow.category == 'matched')
-    books_q = base().filter(ReconRow.category == 'books_only')
-    gstn_q = base().filter(ReconRow.category == 'gstn_only')
     fully_q = base().filter(ReconRow.category == 'matched',
                             ReconRow.recon_status.like('%Fully Reconciled%'))
+    cross_q = base().filter(ReconRow.category == 'matched',
+                            ~ReconRow.recon_status.like('%Fully Reconciled%'))
+    books_q = base().filter(ReconRow.category == 'books_only')
+    gstn_q = base().filter(ReconRow.category == 'gstn_only')
     return jsonify({
-        'cross': matched_q.count(),       'cross_amt': amt(matched_q, ReconRow.books_total),
+        'cross': cross_q.count(),         'cross_amt': amt(cross_q, ReconRow.books_total),
         'books': books_q.count(),         'books_amt': amt(books_q, ReconRow.books_total),
         'gstn': gstn_q.count(),           'gstn_amt': amt(gstn_q, ReconRow.gstn_total),
         'fully': fully_q.count(),         'fully_amt': amt(fully_q, ReconRow.books_total),
@@ -1344,6 +1360,19 @@ def backup_db():
             return send_file(path, as_attachment=True,
                 download_name=f"wiom_recon_backup_{now_ist().strftime('%Y%m%d_%H%M')}.db")
     return jsonify({'error': 'Backup only available for SQLite (local) deployments.'}), 400
+
+
+@app.route('/settings/clear-recon', methods=['POST'])
+@superadmin_required
+def clear_recon_data():
+    """Wipe all recon rows/runs/comments/audit logs. Users, settings, vendor master kept."""
+    from models import AuditLog, RowComment, ReconRow, ReconRun
+    AuditLog.query.delete(synchronize_session=False)
+    RowComment.query.delete(synchronize_session=False)
+    ReconRow.query.delete(synchronize_session=False)
+    ReconRun.query.delete(synchronize_session=False)
+    db.session.commit()
+    return jsonify({'ok': True, 'msg': 'All reconciliation data cleared. Users and settings intact.'})
 
 
 # ----------------------------------------------------------------------
