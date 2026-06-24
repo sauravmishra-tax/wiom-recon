@@ -55,6 +55,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _run_migrations()
         _seed_admin(app)
         _auto_approve_fully_reconciled()
 
@@ -116,6 +117,20 @@ def _auto_approve_fully_reconciled():
     if updated:
         db.session.commit()
         print(f"  [startup] Auto-approved {updated} Fully Reconciled rows.")
+
+
+def _run_migrations():
+    """Add any missing columns to existing tables (safe to run on every start)."""
+    cols_to_add = [
+        ("recon_rows", "itc_table4", "VARCHAR(20) DEFAULT ''"),
+    ]
+    for table, col, col_def in cols_to_add:
+        try:
+            db.session.execute(db.text(f"ALTER TABLE {table} ADD COLUMN {col} {col_def}"))
+            db.session.commit()
+            print(f"  [migration] Added column {table}.{col}")
+        except Exception:
+            db.session.rollback()  # column already exists — ignore
 
 
 def _seed_admin(app):
