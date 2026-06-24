@@ -367,7 +367,7 @@ def _distinct_periods():
 
 
 def _fy_list(periods):
-    """Distinct Indian financial years (start year) from 'YYYY-MM' periods."""
+    """Distinct Indian financial years (start year): from data + current + next 10 years."""
     fys = set()
     for p in periods:
         try:
@@ -375,6 +375,10 @@ def _fy_list(periods):
             fys.add(y if m >= 4 else y - 1)
         except (ValueError, IndexError):
             continue
+    now = now_ist()
+    current_fy = now.year if now.month >= 4 else now.year - 1
+    for i in range(11):          # current FY + 10 future FYs
+        fys.add(current_fy + i)
     return sorted(fys, reverse=True)
 
 
@@ -384,9 +388,7 @@ def detail():
     periods = _distinct_periods()
     fys = _fy_list(periods)
     now = now_ist()
-    current_fy = now.year if now.month >= 4 else now.year - 1   # India FY (Apr–Mar)
-    if current_fy not in fys:
-        fys = sorted(set(fys) | {current_fy}, reverse=True)
+    current_fy = now.year if now.month >= 4 else now.year - 1
     return render_template('detail.html', periods=periods, fys=fys,
                            default_fy=current_fy, states=WIOM_STATES,
                            is_admin=current_user.is_admin,

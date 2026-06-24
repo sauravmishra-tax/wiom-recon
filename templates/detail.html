@@ -16,7 +16,7 @@
             {% for fy in fys %}<option value="{{ fy }}" {{ 'selected' if fy==default_fy }}>FY {{ fy }}-{{ (fy+1)%100 }}</option>{% endfor %}</select></div>
         <div><label>Period</label><select id="fPeriod" onchange="reloadAll()">
             <option value="all">All months</option>
-            {% for p in periods %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></div>
+            {% for p in periods %}<option value="{{ p }}" data-fy="{{ p[:4] if p[5:7]|int >= 4 else (p[:4]|int - 1)|string }}">{{ p }}</option>{% endfor %}</select></div>
         <div><label>State</label><select id="fState" onchange="reloadAll()">
             <option value="all">All states</option>
             {% for s in states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div>
@@ -322,11 +322,30 @@ const TABS = {
 let activeTab='cross', rowsCache={}, sel=new Set(), cur=null;
 const ALL_PERIODS = {{ periods|tojson }};
 function fyOf(p){const y=+p.slice(0,4),m=+p.slice(5,7);return m>=4?y:y-1;}
-// When FY changes, show only that FY's months in Period and reset to All (prevents FY↔Period contradiction)
+// Generate all 12 months for a given FY start year (e.g. 2027 -> ["2027-04","2027-05",...,"2028-03"])
+function fyMonths(fyYear){
+    const months=[];
+    for(let m=4;m<=12;m++) months.push(`${fyYear}-${String(m).padStart(2,'0')}`);
+    for(let m=1;m<=3;m++)  months.push(`${fyYear+1}-${String(m).padStart(2,'0')}`);
+    return months;
+}
+// When FY changes, show only that FY's months in Period; if no DB data for that FY, show all 12 months anyway
 function repopulatePeriods(){
     const fy=v('fFy'), sel=document.getElementById('fPeriod');
     const opts=['<option value="all">All months</option>'];
-    ALL_PERIODS.filter(p=>fy==='all'||fyOf(p)===+fy).forEach(p=>opts.push(`<option value="${p}">${p}</option>`));
+    if(fy==='all'){
+        ALL_PERIODS.forEach(p=>opts.push(`<option value="${p}">${p}</option>`));
+    } else {
+        const fyNum=+fy;
+        const existing=ALL_PERIODS.filter(p=>fyOf(p)===fyNum);
+        const existingSet=new Set(existing);
+        // Merge DB periods + full 12 generated months, deduplicated, sorted
+        const all=[...new Set([...fyMonths(fyNum),...existing])].sort();
+        all.forEach(p=>{
+            const label=existingSet.has(p)?p:`${p} (no data)`;
+            opts.push(`<option value="${p}" ${existingSet.has(p)?'':'style="color:var(--gray)"'}>${label}</option>`);
+        });
+    }
     sel.innerHTML=opts.join('');
 }
 function onFyChange(){repopulatePeriods();reloadAll();}
