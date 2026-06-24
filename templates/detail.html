@@ -54,6 +54,27 @@
     </select>
     <input id="bRemark" placeholder="Bulk remark…" style="width:240px;">
     <button class="btn sm" onclick="bulk('remark')">💬 Apply remark</button>
+    <span style="border-left:1px solid var(--dark3);padding-left:10px;display:flex;gap:6px;align-items:center;">
+      <select id="bTable4" style="width:230px;">
+        <option value="">— 3B Table 4 —</option>
+        <optgroup label="4A — Eligible ITC">
+          <option value="4A1">4A(1) Import of Goods</option>
+          <option value="4A2">4A(2) Import of Services</option>
+          <option value="4A3">4A(3) Reverse Charge (RCM)</option>
+          <option value="4A4">4A(4) From ISD</option>
+          <option value="4A5">4A(5) All Other ITC</option>
+        </optgroup>
+        <optgroup label="4B — ITC Reversed">
+          <option value="4B1">4B(1) Rules 38/42/43 &amp; Sec 17(5)</option>
+          <option value="4B2">4B(2) Others</option>
+        </optgroup>
+        <optgroup label="4D — Other adjustments">
+          <option value="4D1">4D(1) ITC Reclaimed (prev. reversed)</option>
+          <option value="4D2">4D(2) Ineligible — Sec 16(4) / PoS</option>
+        </optgroup>
+      </select>
+      <button class="btn sm" style="background:#0b9d63;border-color:#0b9d63;" onclick="bulkTable4()">⚡ Tag 3B</button>
+    </span>
     {% if is_admin %}
     <button class="btn sm green" onclick="bulk('approve')">✓ Approve</button>
     <button class="btn sm green" onclick="bulk('resolve')">✓✓ Resolve</button>
@@ -425,6 +446,14 @@ function bulk(action){
     if((action!=='remark'&&action!=='assign')&&!confirm(`${sel.size} rows ko "${action}" karein?`))return;
     fetch('/api/rows/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
         .then(r=>r.json()).then(d=>{if(d.ok){clearSel();document.getElementById('bRemark').value='';load();refreshCounts();}else alert(d.error||'Failed');});
+}
+function bulkTable4(){
+    if(!sel.size)return;
+    const val=document.getElementById('bTable4').value;
+    if(!val){alert('Pehle 3B Table 4 select karo.');return;}
+    fetch('/api/rows/bulk',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ids:[...sel],action:'table4',table4:val})})
+        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();load();}else alert(d.error||'Failed');});
 }
 function bulkReject(){
     if(!sel.size)return;

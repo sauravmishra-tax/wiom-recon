@@ -1103,6 +1103,15 @@ def api_bulk():
             log_audit(row.id, current_user, 'assign', 'assigned_to', '',
                       assignee.name if assignee else '(unassigned)')
             changed += 1
+    elif action == 'table4':
+        val = (data.get('table4') or '').strip()
+        if val and val not in _TABLE4_OPTIONS:
+            return jsonify({'ok': False, 'error': 'Invalid Table 4 value.'}), 400
+        for row in rows:
+            old = row.itc_table4 or ''
+            row.itc_table4 = val
+            log_audit(row.id, current_user, 'table4', 'itc_table4', old, val)
+            changed += 1
     else:
         return jsonify({'ok': False, 'error': 'Unknown action.'}), 400
 
