@@ -1,7 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · WIOM Recon{% endblock %}
-{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+#splash{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#0d0515 0%,#1a0a2e 50%,#0d0515 100%);
+  transition:opacity .5s ease,visibility .5s ease;}
+#splash.hide{opacity:0;visibility:hidden;pointer-events:none;}
+.sp-logo{width:72px;height:72px;animation:spPulse 1.2s ease-in-out infinite;}
+@keyframes spPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 12px rgba(224,17,157,.5));}
+  50%{transform:scale(1.08);filter:drop-shadow(0 0 28px rgba(224,17,157,.9));}}
+.sp-title{font-family:'Sora',sans-serif;font-size:28px;font-weight:800;color:#fff;margin-top:20px;letter-spacing:-.02em;}
+.sp-sub{font-size:13px;color:rgba(255,255,255,.45);margin-top:6px;letter-spacing:.04em;text-transform:uppercase;}
+.sp-bar{width:180px;height:3px;background:rgba(255,255,255,.1);border-radius:99px;margin-top:32px;overflow:hidden;}
+.sp-fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#E0119D,#7C5CFF);animation:spLoad 1.4s ease forwards;}
+@keyframes spLoad{0%{width:0}60%{width:75%}100%{width:100%}}
+.sp-user{font-size:12px;color:rgba(255,255,255,.3);margin-top:14px;}
+</style>
+{% endblock %}
 {% block content %}
+
+<!-- Splash screen (only on fresh login) -->
+<div id="splash" style="display:none;">
+  <img src="{{ url_for('static', filename='wiom_logo.png') }}" class="sp-logo" alt="WIOM">
+  <div class="sp-title">WIOM Recon</div>
+  <div class="sp-sub">Books × GST · Intelligence</div>
+  <div class="sp-bar"><div class="sp-fill"></div></div>
+  <div class="sp-user">Welcome back, {{ current_user.name }} 👋</div>
+</div>
+<script>
+(function(){
+  if(sessionStorage.getItem('wiom_greeted')){return;}
+  sessionStorage.setItem('wiom_greeted','1');
+  const s=document.getElementById('splash');
+  s.style.display='flex';
+  setTimeout(()=>s.classList.add('hide'),1600);
+  setTimeout(()=>s.remove(),2200);
+})();
+</script>
 <div class="page-head">
     <div><h2>Dashboard</h2><div class="sub">{% if current_user.is_admin %}All states · all periods · cumulative{% else %}Your states · cumulative{% endif %}</div></div>
     <div style="display:flex;gap:10px;">

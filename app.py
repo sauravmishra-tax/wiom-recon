@@ -1458,6 +1458,37 @@ def api_followup(row_id):
                     'mailto': not (emailed and emailed['ok'])})
 
 
+# ---- GSTR-3B Table 4 tag ----
+_TABLE4_OPTIONS = {
+    '4A1': '4A(1) Import of Goods',
+    '4A2': '4A(2) Import of Services',
+    '4A3': '4A(3) Reverse Charge (RCM)',
+    '4A4': '4A(4) From ISD',
+    '4A5': '4A(5) All Other ITC',
+    '4B1': '4B(1) ITC Reversed — Rules 38/42/43 & Sec 17(5)',
+    '4B2': '4B(2) ITC Reversed — Others',
+    '4D1': '4D(1) ITC Reclaimed (reversed earlier)',
+    '4D2': '4D(2) Ineligible — Sec 16(4) / PoS',
+}
+
+@app.route('/api/table4-options')
+@login_required
+def api_table4_options():
+    return jsonify(_TABLE4_OPTIONS)
+
+
+@app.route('/api/row/<int:row_id>/table4', methods=['POST'])
+@write_required
+def api_set_table4(row_id):
+    row = ReconRow.query.get_or_404(row_id)
+    val = (request.get_json(force=True).get('table4') or '').strip()
+    if val and val not in _TABLE4_OPTIONS:
+        return jsonify(ok=False, error='Invalid table4 value'), 400
+    row.itc_table4 = val
+    db.session.commit()
+    return jsonify(ok=True, itc_table4=val, label=_TABLE4_OPTIONS.get(val, ''))
+
+
 # ---- Zoho ITC Accept / Reject ----
 @app.route('/api/row/<int:row_id>/itc-action', methods=['POST'])
 @write_required

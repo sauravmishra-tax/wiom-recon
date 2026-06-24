@@ -159,6 +159,7 @@ class ReconRow(db.Model):
     followup_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     followup_count = db.Column(db.Integer, default=0)
     followup_note = db.Column(db.Text, default='')
+    itc_table4 = db.Column(db.String(20), default='')  # GSTR-3B Table 4 bucket
 
     remarked_by = db.relationship('User', foreign_keys=[remarked_by_id])
     approved_by = db.relationship('User', foreign_keys=[approved_by_id])
@@ -210,6 +211,7 @@ class ReconRow(db.Model):
             'followup_note': self.followup_note or '',
             'assigned_to': self.assigned_to.name if self.assigned_to else '',
             'assigned_to_id': self.assigned_to_id,
+            'itc_table4': self.itc_table4 or '',
             'attach_count': db.session.execute(
                 db.text('SELECT COUNT(*) FROM row_attachments WHERE row_id=:rid'),
                 {'rid': self.id}).scalar() or 0,

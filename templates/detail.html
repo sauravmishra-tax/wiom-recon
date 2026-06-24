@@ -77,7 +77,29 @@
         <span onclick="closeModal()" style="cursor:pointer;color:var(--gray);font-size:24px;line-height:1;">×</span></div>
     <div id="mInfo" style="font-size:12.5px;color:var(--gray-light);background:var(--dark2);padding:13px;
         border-radius:11px;margin-bottom:14px;line-height:1.85;"></div>
-    <label>Reason</label>
+    <label style="display:flex;align-items:center;gap:8px;">
+      <span>GSTR-3B Table 4</span>
+      <span style="font-size:10px;color:var(--gray);font-weight:400;">— which bucket was this ITC claimed in?</span>
+    </label>
+    <select id="mTable4" onchange="saveTable4()">
+      <option value="">— Not tagged</option>
+      <optgroup label="A. ITC Available">
+        <option value="4A1">4A(1) Import of Goods</option>
+        <option value="4A2">4A(2) Import of Services</option>
+        <option value="4A3">4A(3) Reverse Charge (RCM)</option>
+        <option value="4A4">4A(4) From ISD</option>
+        <option value="4A5">4A(5) All Other ITC</option>
+      </optgroup>
+      <optgroup label="B. ITC Reversed">
+        <option value="4B1">4B(1) Reversed — Rules 38/42/43 &amp; Sec 17(5)</option>
+        <option value="4B2">4B(2) Reversed — Others</option>
+      </optgroup>
+      <optgroup label="D. Other Details">
+        <option value="4D1">4D(1) ITC Reclaimed (prev. reversed under 4B2)</option>
+        <option value="4D2">4D(2) Ineligible — Sec 16(4) / PoS Rules</option>
+      </optgroup>
+    </select>
+    <label style="margin-top:12px;">Reason</label>
     <select id="mReason">
         <option value="">— select —</option>
         <option>Vendor not filed GSTR-1</option><option>Timing difference (next month)</option>
@@ -221,6 +243,19 @@ const C_AGE  = {h:'Age', t:'age'};
 const C_FUP  = {h:'Follow-up', t:'fup'};
 const C_ASSIGN = {h:'Assigned', t:'asgn'};
 const C_ATT  = {h:'📎', t:'att'};
+const C_T4   = {h:'3B Table 4', t:'t4', k:'itc_table4'};
+const TABLE4_OPTS = {
+  '':     '— Not tagged',
+  '4A1':  '4A(1) Import of Goods',
+  '4A2':  '4A(2) Import of Services',
+  '4A3':  '4A(3) Reverse Charge (RCM)',
+  '4A4':  '4A(4) From ISD',
+  '4A5':  '4A(5) All Other ITC',
+  '4B1':  '4B(1) Reversed — Rules 38/42/43 & 17(5)',
+  '4B2':  '4B(2) Reversed — Others',
+  '4D1':  '4D(1) ITC Reclaimed (prev. reversed)',
+  '4D2':  '4D(2) Ineligible — Sec 16(4) / PoS',
+};
 const TABS = {
   pending:{label:'⏳ Pending Approvals', api:{status:'remarked'}, sel:true, adminOnly:true, cols:[
     {k:'books_inv',h:'Books Inv'},{k:'gstn_inv',h:'2B Inv'},{k:'txn_type',h:'Type'},
@@ -246,7 +281,7 @@ const TABS = {
     {k:'gstn_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'gstn_date',h:'Date'},
     {k:'gstn_taxable',h:'Taxable',t:'n'},{k:'gstn_igst',h:'IGST',t:'n'},{k:'gstn_cgst',h:'CGST',t:'n'},
     {k:'gstn_sgst',h:'SGST',t:'n'},{k:'gstn_tax',h:'Total Tax',t:'n'},{k:'gstn_total',h:'Total Amt',t:'n'},
-    C_AGE,{k:'recon_status',h:'Cross Status',t:'sm'},C_TEAM,C_ATT,C_ASSIGN,C_FUP,C_STAT]},
+    C_AGE,{k:'recon_status',h:'Cross Status',t:'sm'},C_T4,C_TEAM,C_ATT,C_ASSIGN,C_FUP,C_STAT]},
   rejected:{label:'Rejected — ITC Ineligible', api:{recon:'rejected'}, sel:false, cols:[
     {k:'gstn_inv',h:'Invoice No'},{k:'txn_type',h:'Type'},{k:'gstn_date',h:'Date'},
     {k:'gstn_taxable',h:'Taxable',t:'n'},{k:'gstn_igst',h:'IGST',t:'n'},{k:'gstn_cgst',h:'CGST',t:'n'},
@@ -367,6 +402,11 @@ function cell(r,c){
     if(c.t==='att'){if(!r.attach_count)return '<td style="color:var(--gray);text-align:center;">—</td>';
         return `<td style="text-align:center;cursor:pointer;" onclick="openRow(${r.id})" title="Click to view attachments"><span style="background:rgba(59,155,255,.18);color:var(--blue);border-radius:12px;padding:2px 8px;font-size:11px;font-weight:700;">📎 ${r.attach_count}</span></td>`;}
     if(c.t==='asgn')return r.assigned_to?`<td><span class="pill remarked">👤 ${esc(r.assigned_to)}</span></td>`:'<td><span style="color:var(--gray)">—</span></td>';
+    if(c.t==='t4'){
+      const lbl=TABLE4_OPTS[val||'']||'';
+      const color=val?'var(--blue)':'var(--gray)';
+      return `<td><span style="font-size:11px;color:${color};cursor:pointer;white-space:nowrap;" onclick="openRow(${r.id})" title="Click to set GSTR-3B Table 4">${val?lbl:'— Tag 3B'}</span></td>`;
+    }
     return `<td>${esc(val==null?'—':val)}</td>`;
 }
 function empty(tab){const span=(tab.sel?4:3)+tab.cols.length;return `<tr><td colspan="${span}" style="padding:22px;color:var(--gray)">No rows.</td></tr>`;}
@@ -404,6 +444,7 @@ function openRow(id){cur=rowsCache[id];const r=cur;
         <b>Books Inv:</b> ${esc(r.books_inv||'—')} (${r.books_date||'—'}) | <b>2B Inv:</b> ${esc(r.gstn_inv||'—')} (${r.gstn_date||'—'})<br>
         <b>Books:</b> ${f(r.books_total)} | <b>2B:</b> ${f(r.gstn_total)} | <b>Diff:</b> ${f(r.total_diff)}<br>
         <b>System:</b> ${esc(r.recon_status||'')} — ${esc(r.system_remark||'')}${r.approved_by?`<br><b>Approved by:</b> ${esc(r.approved_by)} (${r.approved_at})`:''}`;
+    document.getElementById('mTable4').value=r.itc_table4||'';
     document.getElementById('mReason').value=r.team_reason||'';
     document.getElementById('mRemark').value=r.team_remark||'';
     document.getElementById('mHistory').innerHTML='';
@@ -436,6 +477,18 @@ function renderFollow(r){
     el.innerHTML=r.followup_count>0?`<span class="pill remarked">📨 Follow-up #${r.followup_count} by ${esc(r.followup_by)} · ${esc(r.followup_at)}</span> ${esc(r.followup_note||'')}`:'<span style="color:var(--gray)">No follow-up sent yet.</span>';
 }
 function closeModal(){document.getElementById('modal').classList.remove('show');cur=null;}
+function saveTable4(){
+    if(!cur)return;
+    const val=document.getElementById('mTable4').value;
+    fetch(`/api/row/${cur.id}/table4`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({table4:val})}).then(r=>r.json()).then(d=>{
+        if(d.ok){cur.itc_table4=d.itc_table4;rowsCache[cur.id]=Object.assign(rowsCache[cur.id]||{},{itc_table4:d.itc_table4});
+            // refresh the cell in the table without full reload
+            const tabCols=TABS[activeTab]?.cols||[];
+            if(tabCols.find(c=>c.t==='t4'))load();
+        }
+    });
+}
 function saveRemark(){fetch(`/api/row/${cur.id}/remark`,{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({remark:v('mRemark'),reason:v('mReason')})}).then(r=>r.json()).then(d=>{if(d.ok){closeModal();load();refreshCounts();}});}
 function single(action){const note=action==='resolve'?prompt('Resolution note (optional):')||'':'';
