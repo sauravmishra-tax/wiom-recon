@@ -30,8 +30,8 @@
 </div>
 <script>
 (function(){
-  if(sessionStorage.getItem('wiom_greeted')){return;}
-  sessionStorage.setItem('wiom_greeted','1');
+  if(!sessionStorage.getItem('wiom_just_logged_in')){return;}
+  sessionStorage.removeItem('wiom_just_logged_in');
   const s=document.getElementById('splash');
   s.style.display='flex';
   setTimeout(()=>s.classList.add('hide'),1600);

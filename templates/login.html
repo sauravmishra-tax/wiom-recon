@@ -45,9 +45,10 @@
         <input type="email" name="email" required autofocus placeholder="you@wiom.in">
         <label>Password</label>
         <input type="password" name="password" required placeholder="••••••••">
-        <button type="submit" class="submit">Log In</button>
+        <button type="submit" class="submit" onclick="setLoginFlag()">Log In</button>
     </form>
     <script>
+        function setLoginFlag(){try{sessionStorage.setItem('wiom_just_logged_in','1');}catch(e){}}
         function toggleTheme(){var h=document.documentElement;var n=h.getAttribute('data-theme')==='light'?'dark':'light';
             h.setAttribute('data-theme',n);try{localStorage.setItem('wiom-theme',n);}catch(e){}icon();}
         function icon(){var b=document.getElementById('themeBtn');if(b)b.textContent=document.documentElement.getAttribute('data-theme')==='light'?'🌙':'☀️';}
