@@ -342,6 +342,23 @@
     <div id="rejectedCard"><span style="color:var(--gray)">Loading…</span></div>
 </div>
 
+<div class="card" id="g3bCard">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+    <h2 style="margin:0;">📋 GSTR-3B Table 4 — ITC Summary</h2>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select id="g3bFy" style="font-size:12px;padding:5px 10px;border-radius:7px;background:var(--dark2);border:1px solid var(--dark3);color:var(--text);">
+        <option value="">All FY</option>
+      </select>
+      <select id="g3bPeriod" style="font-size:12px;padding:5px 10px;border-radius:7px;background:var(--dark2);border:1px solid var(--dark3);color:var(--text);">
+        <option value="">All months</option>
+      </select>
+      <button class="btn sm ghost" onclick="load3B()">↻ Refresh</button>
+      <a id="g3bLink" href="/detail?tab=gstn" class="btn sm" style="font-size:12px;">Tag more →</a>
+    </div>
+  </div>
+  <div id="g3bBody"><span style="color:var(--gray)">Loading…</span></div>
+</div>
+
 <div class="card">
     <h2>✉️ Vendor Email Tracker <span class="muted" style="font-weight:400;">— rows with emails sent to vendors</span></h2>
     <div id="mailTracker"><span style="color:var(--gray)">Loading…</span></div>
@@ -493,6 +510,116 @@ fetch('/api/vendor-email-tracker').then(r=>r.json()).then(rows=>{
         <td><span class="pill ${pillMap[r.status]||'open'}">${r.status}</span></td>
       </tr>`).join('')}</tbody></table></div>`;
 });
+
+/* ── GSTR-3B Table 4 card ── */
+const T4_LABELS={
+  '4A1':'4A(1) Import of Goods','4A2':'4A(2) Import of Services',
+  '4A3':'4A(3) Reverse Charge (RCM)','4A4':'4A(4) From ISD','4A5':'4A(5) All Other ITC',
+  '4B1':'4B(1) Rules 38/42/43 & 17(5)','4B2':'4B(2) Others',
+  '4D1':'4D(1) ITC Reclaimed (prev. reversed)','4D2':'4D(2) Ineligible — Sec 16(4)/PoS',
+};
+const T4_COLS={
+  '4A':['4A1','4A2','4A3','4A4','4A5'],
+  '4B':['4B1','4B2'],
+  '4D':['4D1','4D2'],
+};
+const T4_COLOR={'4A':'var(--green)','4B':'var(--red)','4D':'var(--orange)'};
+const T4_ICON={'4A':'✅','4B':'🔄','4D':'⚠️'};
+const T4_HEAD={'4A':'Eligible ITC','4B':'ITC Reversed','4D':'Other Adjustments'};
+
+// populate FY & period dropdowns from runs data
+fetch('/api/counts').then(()=>{}).catch(()=>{});
+(function(){
+  fetch('/api/trend').then(r=>r.json()).then(t=>{
+    const fySet=new Set(), pSet=new Set();
+    t.forEach(x=>{if(x.period){const p=x.period;pSet.add(p);const y=p.split('-')[0];const fy=parseInt(y)>=4?`FY ${y}-${String(parseInt(y)+1).slice(2)}`:`FY ${parseInt(y)-1}-${String(y).slice(2)}`;fySet.add(fy);}});
+    const fyEl=document.getElementById('g3bFy');
+    [...fySet].sort().reverse().forEach(fy=>{const o=document.createElement('option');o.value=fy;o.textContent=fy;fyEl.appendChild(o);});
+    const pEl=document.getElementById('g3bPeriod');
+    [...pSet].sort().reverse().forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;pEl.appendChild(o);});
+  });
+})();
+
+function load3B(){
+  const fy=document.getElementById('g3bFy').value;
+  const period=document.getElementById('g3bPeriod').value;
+  const params=new URLSearchParams();
+  if(fy)params.set('fy',fy);
+  if(period)params.set('period',period);
+  const link=document.getElementById('g3bLink');
+  if(period)link.href=`/detail?tab=gstn&period=${period}`;
+  fetch('/api/gstr3b?'+params).then(r=>r.json()).then(d=>{
+    const el=document.getElementById('g3bBody');
+    const b=d.buckets||{};
+    const untagged=d.untagged||{cnt:0,itc:0};
+    const totalTagged=d.total_tagged_itc||0;
+
+    let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px;">`;
+    ['4A','4B','4D'].forEach(sec=>{
+      const tot=d[sec+'_total']||{cnt:0,itc:0};
+      html+=`<div style="background:var(--dark2);border:1px solid var(--dark3);border-radius:12px;padding:14px;border-top:3px solid ${T4_COLOR[sec]};">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:${T4_COLOR[sec]};margin-bottom:8px;">${T4_ICON[sec]} Table ${sec} — ${T4_HEAD[sec]}</div>
+        <div style="font-size:22px;font-weight:900;font-family:'Sora';">₹${fmt(tot.itc)}</div>
+        <div style="font-size:11px;color:var(--gray);margin-top:2px;">${fmt(tot.cnt)} rows tagged</div>
+      </div>`;
+    });
+    html+=`</div>`;
+
+    // detailed row-by-row table
+    html+=`<div style="overflow:auto;"><table style="width:100%;">
+      <thead><tr>
+        <th style="width:60px;">Table</th>
+        <th>Description</th>
+        <th class="num">Rows</th>
+        <th class="num">ITC Amount (₹)</th>
+        <th class="num">% of Tagged</th>
+      </tr></thead><tbody>`;
+
+    ['4A','4B','4D'].forEach(sec=>{
+      const keys=T4_COLS[sec];
+      const hasAny=keys.some(k=>b[k]);
+      keys.forEach((k,i)=>{
+        const row=b[k]||{cnt:0,itc:0};
+        const pct=totalTagged>0?(row.itc/totalTagged*100).toFixed(1):'0.0';
+        const isFirst=i===0;
+        html+=`<tr ${isFirst?`style="border-top:2px solid ${T4_COLOR[sec]}20;"`:''}>
+          <td><span style="font-size:11px;font-weight:800;color:${T4_COLOR[sec]};background:${T4_COLOR[sec]}18;padding:2px 8px;border-radius:6px;">${k}</span></td>
+          <td style="font-size:12px;">${T4_LABELS[k]||k}</td>
+          <td class="num" style="font-weight:700;">${fmt(row.cnt)||'—'}</td>
+          <td class="num" style="${sec==='4B'?'color:var(--red);':sec==='4D'?'color:var(--orange);':''}">₹${fmt(row.itc)}</td>
+          <td class="num" style="color:var(--gray);">${pct}%</td>
+        </tr>`;
+      });
+      // section subtotal
+      const tot=d[sec+'_total']||{cnt:0,itc:0};
+      html+=`<tr style="background:var(--dark2);font-weight:800;">
+        <td colspan="2" style="font-size:11px;color:${T4_COLOR[sec]};">Total — Table ${sec}</td>
+        <td class="num">${fmt(tot.cnt)}</td>
+        <td class="num" style="color:${T4_COLOR[sec]};">₹${fmt(tot.itc)}</td>
+        <td class="num" style="color:var(--gray);">${totalTagged>0?(tot.itc/totalTagged*100).toFixed(1):'0.0'}%</td>
+      </tr>`;
+    });
+
+    // untagged row
+    html+=`<tr style="border-top:2px solid var(--dark3);">
+      <td><span style="font-size:11px;font-weight:800;color:var(--gray);background:var(--dark3);padding:2px 8px;border-radius:6px;">—</span></td>
+      <td style="font-size:12px;color:var(--gray);">Not tagged yet</td>
+      <td class="num" style="color:var(--gray);">${fmt(untagged.cnt)}</td>
+      <td class="num" style="color:var(--gray);">₹${fmt(untagged.itc)}</td>
+      <td class="num" style="color:var(--gray);">—</td>
+    </tr>`;
+
+    html+=`</tbody></table></div>`;
+
+    if(!d.total_tagged_cnt && !untagged.cnt){
+      html='<div style="color:var(--gray);padding:16px;">No data found. Upload a recon and tag rows with 3B Table 4 from Detail & Remarks.</div>';
+    }
+    el.innerHTML=html;
+  });
+}
+document.getElementById('g3bFy').addEventListener('change',load3B);
+document.getElementById('g3bPeriod').addEventListener('change',load3B);
+load3B();
 
 fetch('/api/trend').then(r=>r.json()).then(t=>{
     if(!t.length){document.getElementById('trend').parentElement.innerHTML='<span style="color:var(--gray)">No data yet.</span>';return;}

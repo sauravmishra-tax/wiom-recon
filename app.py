@@ -1029,6 +1029,62 @@ def api_counts():
     })
 
 
+@app.route('/api/gstr3b')
+@login_required
+def api_gstr3b():
+    """GSTR-3B Table 4 summary — row counts + ITC amounts by bucket."""
+    from sqlalchemy import func
+    fy = request.args.get('fy', '')
+    period = request.args.get('period', '')
+
+    def base():
+        q = ReconRow.query
+        if not current_user.is_admin:
+            states = [s.strip() for s in (current_user.allowed_states or '').split(',') if s.strip()]
+            if states:
+                q = q.filter(ReconRow.state_name.in_(states))
+        if fy:
+            q = q.filter(ReconRow.financial_year == fy)
+        if period:
+            q = q.filter(ReconRow.period == period)
+        return q
+
+    rows = base().with_entities(
+        ReconRow.itc_table4,
+        func.count(ReconRow.id).label('cnt'),
+        func.sum(ReconRow.igst + ReconRow.cgst + ReconRow.sgst).label('itc'),
+        func.sum(ReconRow.taxable_value).label('taxable'),
+    ).group_by(ReconRow.itc_table4).all()
+
+    buckets = {}
+    untagged_cnt = 0; untagged_itc = 0
+    for r in rows:
+        tag = (r.itc_table4 or '').strip()
+        if not tag:
+            untagged_cnt += int(r.cnt or 0)
+            untagged_itc += float(r.itc or 0)
+        else:
+            buckets[tag] = {'cnt': int(r.cnt or 0), 'itc': float(r.itc or 0), 'taxable': float(r.taxable or 0)}
+
+    # also compute totals per section
+    def section_total(keys):
+        return {
+            'cnt': sum(buckets.get(k, {}).get('cnt', 0) for k in keys),
+            'itc': sum(buckets.get(k, {}).get('itc', 0) for k in keys),
+        }
+
+    return jsonify({
+        'buckets': buckets,
+        'untagged': {'cnt': untagged_cnt, 'itc': untagged_itc},
+        'total_tagged_cnt': sum(v['cnt'] for v in buckets.values()),
+        'total_tagged_itc': sum(v['itc'] for v in buckets.values()),
+        '4A_total': section_total(['4A1','4A2','4A3','4A4','4A5']),
+        '4B_total': section_total(['4B1','4B2']),
+        '4D_total': section_total(['4D1','4D2']),
+        'labels': _TABLE4_OPTIONS,
+    })
+
+
 @app.route('/api/rows/bulk', methods=['POST'])
 @write_required
 def api_bulk():
