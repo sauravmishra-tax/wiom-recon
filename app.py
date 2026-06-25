@@ -12,13 +12,31 @@ import sys
 import json
 import time
 import threading
+import base64
+import hashlib
 from datetime import datetime
+from cryptography.fernet import Fernet
 
 from flask import (Flask, render_template, request, jsonify, send_file,
                    redirect, url_for, abort)
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from sqlalchemy import func
+
+def _get_fernet():
+    key = (os.environ.get('SECRET_KEY') or 'wiom-recon-default-secret-key-change-me').encode()
+    derived = base64.urlsafe_b64encode(hashlib.sha256(key).digest())
+    return Fernet(derived)
+
+def _encrypt(val):
+    if not val: return val
+    return _get_fernet().encrypt(val.encode()).decode()
+
+def _decrypt(val):
+    if not val: return val
+    try: return _get_fernet().decrypt(val.encode()).decode()
+    except Exception: return val  # fallback for pre-encryption plain values
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
@@ -123,6 +141,12 @@ def _run_migrations():
     """Add any missing columns to existing tables (safe to run on every start)."""
     cols_to_add = [
         ("recon_rows", "itc_table4", "VARCHAR(20) DEFAULT ''"),
+        # FIX 2 — soft-delete audit logs on re-upload
+        ("recon_runs", "archived", "BOOLEAN DEFAULT 0"),
+        # FIX 3 — period lock/unlock
+        ("recon_runs", "locked", "BOOLEAN DEFAULT 0"),
+        ("recon_runs", "locked_by_id", "INTEGER"),
+        ("recon_runs", "locked_at", "DATETIME"),
     ]
     for table, col, col_def in cols_to_add:
         try:
@@ -131,6 +155,15 @@ def _run_migrations():
             print(f"  [migration] Added column {table}.{col}")
         except Exception:
             db.session.rollback()  # column already exists — ignore
+
+    # FIX 6 — seed default email settings if not already set
+    for k, v in [
+        ('email_cc', 'mahesh.thakur@wiom.in, wiomfinance@wiom.in, tushar.gupta@wiom.in, ap@wiom.in'),
+        ('email_sign', 'Regards,\nFinance and Taxation Team\nOmnia Information Private Limited'),
+    ]:
+        if not get_setting(k):
+            set_setting(k, v)
+            db.session.commit()
 
 
 def _seed_admin(app):
@@ -355,7 +388,7 @@ def run_reconciliation(file_path, period, label, user_id, run_state=None):
 def dashboard():
     periods = [p[0] for p in db.session.query(ReconRow.period)
                .distinct().order_by(ReconRow.period.desc()).all()]
-    runs = ReconRun.query.order_by(ReconRun.created_at.desc()).limit(12).all()
+    runs = ReconRun.query.filter(ReconRun.archived != True).order_by(ReconRun.created_at.desc()).limit(12).all()
     stats = _summary_stats(current_user)
     return render_template('dashboard.html', periods=periods, runs=runs,
                            stats=stats, states=WIOM_STATES)
@@ -581,7 +614,10 @@ def settings_page():
         slack_configured=bool(get_setting('slack_webhook')),
         slack_send_day=get_setting('slack_send_day', '*'),
         # GSP / GSTR-2B source
-        gsp_provider=get_setting('gsp_provider'), gsp_configured=bool(get_setting('gsp_provider')))
+        gsp_provider=get_setting('gsp_provider'), gsp_configured=bool(get_setting('gsp_provider')),
+        # FIX 6 — dynamic email settings
+        email_cc=get_setting('email_cc', 'mahesh.thakur@wiom.in, wiomfinance@wiom.in, tushar.gupta@wiom.in, ap@wiom.in'),
+        email_sign=get_setting('email_sign', 'Regards,\nFinance and Taxation Team\nOmnia Information Private Limited'))
 
 
 @app.route('/settings/zoho', methods=['POST'])
@@ -628,7 +664,7 @@ def sync_zoho():
 def _smtp_cfg():
     return {
         'host': get_setting('smtp_host'), 'port': get_setting('smtp_port', '587'),
-        'user': get_setting('smtp_user'), 'password': get_setting('smtp_password'),
+        'user': get_setting('smtp_user'), 'password': _decrypt(get_setting('smtp_password')),
         'from_addr': get_setting('smtp_from') or get_setting('smtp_user'),
         'use_tls': get_setting('smtp_tls', '1'),
     }
@@ -648,9 +684,11 @@ def save_smtp():
     set_setting('smtp_tls', '1' if request.form.get('use_tls') == 'on' else '0')
     pw = request.form.get('password', '').strip()
     if pw:
-        set_setting('smtp_password', pw)
+        set_setting('smtp_password', _encrypt(pw))
     set_setting('cfo_email', request.form.get('cfo_email', '').strip())
     set_setting('cfo_send_day', request.form.get('cfo_send_day', '1').strip())
+    set_setting('email_cc', request.form.get('email_cc', '').strip())
+    set_setting('email_sign', request.form.get('email_sign', '').strip())
     db.session.commit()
     from flask import flash
     flash('Email settings saved.', 'success')
@@ -1101,6 +1139,12 @@ def api_bulk():
     rows = ReconRow.query.filter(ReconRow.id.in_(ids)).all()
     changed = 0
 
+    # FIX 3 — check if any of these rows belong to a locked period
+    for r in rows:
+        run = db.session.get(ReconRun, r.run_id)
+        if run and run.locked:
+            return jsonify({'ok': False, 'error': 'Period is locked. Contact Super Admin to unlock.'}), 403
+
     if action == 'remark':
         remark = data.get('remark', '').strip()
         reason = data.get('reason', '').strip()
@@ -1502,6 +1546,24 @@ def api_attachment_delete(att_id):
     return jsonify({'ok': True})
 
 
+# FIX 3 — Period lock / unlock
+@app.route('/api/run/<int:run_id>/lock', methods=['POST'])
+@login_required
+def api_lock_run(run_id):
+    if not current_user.is_superadmin:
+        abort(403)
+    run = db.session.get(ReconRun, run_id)
+    if not run:
+        abort(404)
+    data = request.get_json(force=True)
+    lock = data.get('lock', True)
+    run.locked = lock
+    run.locked_by_id = current_user.id if lock else None
+    run.locked_at = now_ist() if lock else None
+    db.session.commit()
+    return jsonify({'ok': True, 'locked': run.locked})
+
+
 # ---- Feature 10: vendor follow-up (Book-Keeping shoots mail; everyone sees tracking) ----
 @app.route('/api/row/<int:row_id>/followup', methods=['POST'])
 @login_required
@@ -1609,9 +1671,16 @@ def api_itc_action(row_id):
 
 
 # ---- Vendor Email: send + thread + log ----
-_CONTACT_LINE = "For any concerns or queries, please feel free to contact @mahesh.thakur@wiom.in, @tushar.gupta@wiom.in and @ap@wiom.in"
-_DEFAULT_CC    = 'mahesh.thakur@wiom.in, wiomfinance@wiom.in, tushar.gupta@wiom.in, ap@wiom.in'
-_SIGN          = "Regards,\nFinance and Taxation Team\nOmnia Information Private Limited"
+def _email_contact_line():
+    cc = get_setting('email_cc', 'mahesh.thakur@wiom.in, tushar.gupta@wiom.in, ap@wiom.in')
+    emails = [e.strip() for e in cc.split(',') if e.strip()]
+    return 'For any concerns or queries, please feel free to contact ' + ', '.join(f'@{e}' for e in emails)
+
+def _email_default_cc():
+    return get_setting('email_cc', 'mahesh.thakur@wiom.in, wiomfinance@wiom.in, tushar.gupta@wiom.in, ap@wiom.in')
+
+def _email_sign():
+    return get_setting('email_sign', 'Regards,\nFinance and Taxation Team\nOmnia Information Private Limited')
 
 _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -1689,9 +1758,9 @@ This is causing an ITC mismatch in our books. Request you to:
 Please revert on this email at the earliest to avoid any ITC loss on our side.
 {note_ln}
 
-{_CONTACT_LINE}
+{_email_contact_line()}
 
-{_SIGN}
+{_email_sign()}
 """
 
     elif tpl_key == 'not_received':
@@ -1708,9 +1777,9 @@ GSTIN (yours): {gstin}
 Request you to share the original invoice copy at the earliest so we can book it in our records.
 {note_ln}
 
-{_CONTACT_LINE}
+{_email_contact_line()}
 
-{_SIGN}
+{_email_sign()}
 """
 
     else:  # followup
@@ -1726,9 +1795,9 @@ GSTIN: {gstin}
 We have not yet received a response. Request you to kindly revert at the earliest.
 {note_ln}
 
-{_CONTACT_LINE}
+{_email_contact_line()}
 
-{_SIGN}
+{_email_sign()}
 """
 
     return body

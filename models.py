@@ -99,7 +99,13 @@ class ReconRun(db.Model):
     total_rows = db.Column(db.Integer, default=0)
     summary_json = db.Column(db.Text, default='{}')  # stats blob
 
+    archived = db.Column(db.Boolean, default=False, index=True)
+    locked = db.Column(db.Boolean, default=False, index=True)
+    locked_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    locked_at = db.Column(db.DateTime)
+
     uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
+    locked_by = db.relationship('User', foreign_keys=[locked_by_id])
     rows = db.relationship('ReconRow', backref='run', cascade='all, delete-orphan')
 
 

@@ -4,11 +4,17 @@ as workflow rows, and sync the vendor master.
 
 Called after the 9-agent engine finishes a run.
 """
+import re as _re
 import pandas as pd
 from collections import Counter
 from datetime import datetime
 from models import db, ReconRow, ReconRun, RowComment, RowAttachment, AuditLog, VendorMaster, now_ist
 from state_codes import state_from_gstin
+
+_GSTIN_RE = _re.compile(r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$')
+
+def is_valid_gstin(g):
+    return bool(g and _GSTIN_RE.match(str(g).strip().upper()))
 
 
 def _carry_key(row):
@@ -101,6 +107,8 @@ def sync_vendor_master(vendor_map, gst_cache=None):
     for gstin, name in (vendor_map or {}).items():
         g = _s(gstin)
         if not g:
+            continue
+        if not is_valid_gstin(g):
             continue
         code, state = state_from_gstin(g)
         vm = db.session.get(VendorMaster, g)
@@ -222,6 +230,17 @@ def _build_carry_map(run, run_state):
     return carry, prior_ids
 
 
+def _dedup(rows, key_fn):
+    seen = set()
+    out = []
+    for r in rows:
+        k = key_fn(r)
+        if k not in seen:
+            seen.add(k)
+            out.append(r)
+    return out
+
+
 def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
                 vendor_map=None, gst_cache=None, run_state=None,
                 reconciled_dfs=None):
@@ -233,6 +252,11 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
       replaced with the fresh snapshot. Team remarks/reasons/status/assignment/comments
       are carried over to matching invoices so no rework is needed.
     """
+    # FIX 4 — deduplicate input rows before persisting
+    inv_matched     = _dedup(inv_matched or [],     lambda r: (_s(r.get('GSTIN', '')), (r.get('Transaction Number') or r.get('Books_Inv') or r.get('Books Inv', '')).strip(), ''))
+    books_unmatched = _dedup(books_unmatched or [], lambda r: (_s(r.get('GSTIN', '')), (r.get('Transaction Number', '') or '').strip(), ''))
+    gstn_unmatched  = _dedup(gstn_unmatched or [],  lambda r: (_s(r.get('GSTIN', '')), '', (r.get('Transaction Number', '') or '').strip()))
+
     if vendor_map:
         sync_vendor_master(vendor_map, gst_cache)
 
@@ -243,10 +267,16 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
 
     n = 0
     for m in (inv_matched or []):
+        if not is_valid_gstin(_s(m.get('GSTIN', ''))):
+            continue
         db.session.add(_make_row(run, m, 'matched', run_state, rs_code)); n += 1
     for m in (books_unmatched or []):
+        if not is_valid_gstin(_s(m.get('GSTIN', ''))):
+            continue
         db.session.add(_make_row(run, m, 'books_only', run_state, rs_code)); n += 1
     for m in (gstn_unmatched or []):
+        if not is_valid_gstin(_s(m.get('GSTIN', ''))):
+            continue
         db.session.add(_make_row(run, m, 'gstn_only', run_state, rs_code)); n += 1
     for df in (reconciled_dfs or []):
         n += persist_reconciled_df(run, df, vendor_map, run_state, rs_code)
@@ -280,16 +310,20 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
                     uploaded_at=a.uploaded_at))
             carried += 1
 
-    # ---- replace entire state snapshot: delete ALL prior state runs ----
+    # ---- replace entire state snapshot: archive prior runs, preserve audit trail ----
     if prior_ids:
-        old_row_ids = [r.id for r in ReconRow.query
-                       .filter(ReconRow.run_id.in_(prior_ids)).all()]
+        old_row_ids = [r.id for r in ReconRow.query.filter(ReconRow.run_id.in_(prior_ids)).all()]
         if old_row_ids:
-            AuditLog.query.filter(AuditLog.row_id.in_(old_row_ids)).delete(synchronize_session=False)
+            # Preserve audit trail — detach logs from deleted rows (set row_id=None, keep record)
+            db.session.execute(
+                db.text('UPDATE audit_log SET row_id=NULL WHERE row_id IN :ids'),
+                {'ids': tuple(old_row_ids) if len(old_row_ids) > 1 else (old_row_ids[0], old_row_ids[0])}
+            )
             RowComment.query.filter(RowComment.row_id.in_(old_row_ids)).delete(synchronize_session=False)
             RowAttachment.query.filter(RowAttachment.row_id.in_(old_row_ids)).delete(synchronize_session=False)
             ReconRow.query.filter(ReconRow.run_id.in_(prior_ids)).delete(synchronize_session=False)
-        ReconRun.query.filter(ReconRun.id.in_(prior_ids)).delete(synchronize_session=False)
+        # Archive old runs instead of deleting
+        ReconRun.query.filter(ReconRun.id.in_(prior_ids)).update({'archived': True}, synchronize_session=False)
 
     run.total_rows = n
     db.session.commit()
