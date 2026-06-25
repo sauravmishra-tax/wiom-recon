@@ -24,6 +24,47 @@
     <button class="btn" id="goBtn" style="margin-top:18px;" onclick="startUpload()">🚀 Run Reconciliation</button>
 </div>
 
+<!-- ===== FETCH FROM ZOHO CARD ===== -->
+<div class="card" id="zohoCard" style="margin-top:20px;">
+    <h2 style="margin-bottom:4px;">⚡ Fetch Directly from Zoho Books</h2>
+    <div class="sub" style="margin-bottom:18px;">No Excel needed — pulls GSTR-2B vs Books recon data live from Zoho Books API, state-wise, and creates runs automatically.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:end;">
+        <div>
+            <label>Return Month (GSTR-2B period)</label>
+            <input type="month" id="zPeriod">
+        </div>
+        <div>
+            <label>States to fetch</label>
+            <select id="zStates" multiple style="height:96px;">
+                {% for s in ['Delhi','Haryana','Maharashtra','Uttar Pradesh'] %}
+                <option value="{{ s }}" selected>{{ s }}</option>
+                {% endfor %}
+            </select>
+            <div class="sub" style="margin-top:4px;">Ctrl+click to select specific states. Default = all.</div>
+        </div>
+        <div>
+            <label>Label (optional)</label>
+            <input type="text" id="zLabel" placeholder="e.g. auto-sync Apr 26">
+        </div>
+    </div>
+
+    <div id="zohoNotCfg" style="display:none;margin-top:14px;padding:10px 14px;background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.3);border-radius:8px;color:#ff6b6b;font-size:13px;">
+        Zoho not configured. <a href="{{ url_for('settings') }}" style="color:#ff6b6b;text-decoration:underline;">Go to Settings → Zoho</a> and enter your API credentials first.
+    </div>
+
+    <button class="btn green" id="zBtn" style="margin-top:18px;" onclick="fetchFromZoho()">⚡ Fetch from Zoho</button>
+
+    <!-- progress/result area -->
+    <div id="zProgress" style="display:none;margin-top:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <div class="spinner" id="zSpinner" style="width:18px;height:18px;border:3px solid var(--dark3);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+            <span id="zStatus" style="font-size:13px;color:var(--gray)">Connecting to Zoho…</span>
+        </div>
+        <div id="zResults" style="display:none;"></div>
+    </div>
+</div>
+
 <div class="card" id="progressCard" style="display:none;">
     <h2>⚙️ <span id="curAgent">Starting…</span> <span id="pct" style="margin-left:auto;color:var(--pink-light)"></span></h2>
     <div style="background:var(--dark3);border-radius:20px;height:10px;overflow:hidden;margin-bottom:16px;">
@@ -80,5 +121,70 @@ function refresh(){
     });
 }
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+
+// ===== ZOHO DIRECT FETCH =====
+function fetchFromZoho(){
+    const period = document.getElementById('zPeriod').value;
+    if(!period){alert('Select the return month first.');return;}
+
+    const sel = document.getElementById('zStates');
+    const states = Array.from(sel.selectedOptions).map(o=>o.value);
+    const label  = document.getElementById('zLabel').value.trim();
+
+    document.getElementById('zBtn').disabled = true;
+    document.getElementById('zProgress').style.display = 'block';
+    document.getElementById('zResults').style.display = 'none';
+    document.getElementById('zohoNotCfg').style.display = 'none';
+    document.getElementById('zStatus').textContent = 'Connecting to Zoho Books…';
+
+    fetch('/upload/from-zoho', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({period, states, label})
+    })
+    .then(r=>r.json())
+    .then(d=>{
+        document.getElementById('zSpinner').style.display = 'none';
+        document.getElementById('zBtn').disabled = false;
+        if(!d.ok){
+            if(d.error && d.error.includes('not configured')){
+                document.getElementById('zohoNotCfg').style.display = 'block';
+                document.getElementById('zProgress').style.display = 'none';
+            } else {
+                document.getElementById('zStatus').textContent = '❌ ' + d.error;
+            }
+            return;
+        }
+        document.getElementById('zStatus').textContent = `✅ Fetched for ${d.states.length} state(s)`;
+        const res = document.getElementById('zResults');
+        res.style.display = 'block';
+        res.innerHTML = `
+        <div style="margin-bottom:10px;font-weight:600;color:var(--green)">
+            Import complete — ${d.states.length} run(s) created for ${period}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
+        ${d.states.map(s=>`
+            <div style="background:var(--dark3);border-radius:10px;padding:12px 14px;">
+                <div style="font-weight:600;margin-bottom:6px;">📍 ${s.state}</div>
+                <div style="font-size:12px;color:var(--gray);line-height:1.8;">
+                    Matched: <b style="color:var(--green)">${s.matched}</b><br>
+                    Books only: <b style="color:var(--yellow,#f5c518)">${s.books_only}</b><br>
+                    GSTN only: <b style="color:var(--negc)">${s.gstn_only}</b><br>
+                    Reconciled: <b style="color:var(--green)">${s.reconciled}</b><br>
+                    Total rows: <b>${s.rows}</b>
+                </div>
+                <a href="/detail?run_id=${s.run_id}" class="btn" style="margin-top:10px;padding:6px 12px;font-size:12px;display:inline-block;">
+                    View →
+                </a>
+            </div>
+        `).join('')}
+        </div>`;
+    })
+    .catch(e=>{
+        document.getElementById('zBtn').disabled = false;
+        document.getElementById('zStatus').textContent = '❌ Network error: ' + e.message;
+    });
+}
+@keyframes spin{to{transform:rotate(360deg)}}
 </script>
 {% endblock %}
