@@ -141,10 +141,11 @@
 
   function makeStream(side,data){
     return Array.from({length:30},(_,i)=>({
-      x: side==='L' ? -60-Math.random()*W*.6 : W+60+Math.random()*W*.6,
-      y: CY + (Math.random()-.5)*H*.55,
-      vx: side==='L' ? 4+Math.random()*3 : -(4+Math.random()*3),
-      vy: (Math.random()-.5)*.8,
+      // start from screen edge (not W*0.6 beyond it — that caused late collisions)
+      x: side==='L' ? -(60+Math.random()*200) : W+(60+Math.random()*200),
+      y: CY + (Math.random()-.5)*H*.5,
+      vx: side==='L' ? 6+Math.random()*4 : -(6+Math.random()*4),
+      vy: (Math.random()-.5)*.7,
       label: data[i%data.length],
       alpha:0, size: 9+Math.random()*5,
       side, dead:false, debris:false,
@@ -272,13 +273,13 @@
 
   /* ── Kick off ── */
   splash.style.display='block';
-  // show labels
   setTimeout(()=>{
     document.getElementById('spLabelL').style.opacity='1';
     document.getElementById('spLabelR').style.opacity='1';
   },200);
-  // start streams after 0.4s
   setTimeout(()=>{phase=1;},400);
+  // safety net — force explosion at 2.2s if collision never triggered
+  setTimeout(()=>{if(!exploded)explode();},2200);
   draw();
 
   // exit
