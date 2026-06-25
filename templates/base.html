@@ -22,11 +22,38 @@
         }
         /* ============ LIGHT ============ */
         [data-theme="light"]{
-            --black:#F4F5FA; --dark:#FFFFFF; --dark2:#F1F3F9; --dark3:#E4E7F0;
-            --white:#13141B; --gray:#6A7080; --gray-light:#535A6B;
-            --green:#0B9D63; --red:#E1395A; --blue:#2270D8; --orange:#D9700F; --yellow:#B8860B;
-            --negc:#C42547; --shadow:0 10px 34px rgba(40,44,66,.10); --shadow-sm:0 2px 10px rgba(40,44,66,.07);
+            --black:#F0F2F8; --dark:#FFFFFF; --dark2:#F1F3F9; --dark3:#DDE1EC;
+            --white:#111827; --gray:#6A7080; --gray-light:#4B5563;
+            --green:#0B9D63; --red:#DC2626; --blue:#2563EB; --orange:#D97706; --yellow:#92400E;
+            --negc:#B91C1C; --shadow:0 10px 34px rgba(40,44,66,.10); --shadow-sm:0 2px 10px rgba(40,44,66,.07);
         }
+        [data-theme="light"] body{
+            background-image:radial-gradient(1200px 500px at 100% -10%,rgba(124,92,255,.04),transparent),
+                radial-gradient(1000px 500px at -10% 0%,rgba(224,17,157,.04),transparent);
+        }
+        /* Light header — white with subtle pink underline */
+        [data-theme="light"] .header{
+            background:#fff;
+            border-bottom:1px solid #E9D5FF;
+            box-shadow:0 2px 14px rgba(124,92,255,.08);
+        }
+        [data-theme="light"] .logo h1{color:#1a0030;}
+        [data-theme="light"] .logo p{color:#7C5CFF;}
+        [data-theme="light"] nav a.navlink{color:#4B5563;}
+        [data-theme="light"] nav a.navlink:hover{background:rgba(124,92,255,.08);color:#1a0030;}
+        [data-theme="light"] nav a.navlink.active{background:rgba(224,17,157,.1);color:#9C0A6E;box-shadow:inset 0 0 0 1px rgba(224,17,157,.2);}
+        [data-theme="light"] .theme-btn{background:rgba(124,92,255,.1);color:#7C5CFF;}
+        [data-theme="light"] .theme-btn:hover{background:rgba(124,92,255,.2);}
+        [data-theme="light"] .user-chip{color:#4B5563;border-left-color:rgba(0,0,0,.1);}
+        [data-theme="light"] .user-chip b{color:#111827;}
+        [data-theme="light"] .logo-img{filter:drop-shadow(0 2px 6px rgba(224,17,157,.3));}
+        /* Light scrollbar */
+        [data-theme="light"] ::-webkit-scrollbar-thumb{background:#DDE1EC;}
+        /* Light modal backdrop */
+        [data-theme="light"] .modal-bg{background:rgba(17,24,39,.5);}
+        /* Light flash */
+        [data-theme="light"] .flash.error{background:rgba(220,38,38,.08);}
+        [data-theme="light"] .flash.success{background:rgba(11,157,99,.08);}
         *{margin:0;padding:0;box-sizing:border-box;}
         body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--black);color:var(--white);
             min-height:100vh;-webkit-font-smoothing:antialiased;transition:background .25s,color .25s;
