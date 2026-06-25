@@ -1,5 +1,5 @@
 """
-Slack notification helpers for WIOM Recon.
+Slack notification helpers for WIOM GST Recon.
 Sends messages to #wiom-gst-recon channel.
 """
 import requests

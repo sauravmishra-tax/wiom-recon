@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login · WIOM Recon</title>
+    <title>Login · WIOM GST Recon</title>
     <script>(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('wiom-theme')||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
@@ -36,7 +36,7 @@
     <form class="box" method="POST">
         <button type="button" class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle light / dark">☀️</button>
         <img src="{{ url_for('static', filename='wiom_logo.png') }}" class="logo-icon" alt="Wiom">
-        <h1>WIOM Recon</h1>
+        <h1>WIOM GST Recon</h1>
         <p class="sub">Books vs GST Reconciliation Platform</p>
         {% with msgs = get_flashed_messages(with_categories=true) %}
             {% for cat, m in msgs %}<div class="err">{{ m }}</div>{% endfor %}

@@ -722,7 +722,7 @@ def _send_cfo_email(recipient=None):
     xls = export_excel.build_cumulative_excel(rows, gap, 'All states · cumulative')
     body = render_template('cfo_email.html', **ctx)
     return email_util.send_email(_smtp_cfg(), to,
-        f"WIOM Recon — CFO Summary ({ctx['generated']})", body,
+        f"WIOM GST Recon — CFO Summary ({ctx['generated']})", body,
         attachment=xls.read(), attachment_name=f"WIOM_Cumulative_{now_ist().strftime('%Y%m%d')}.xlsx")
 
 
@@ -779,9 +779,9 @@ def _send_slack_report():
         ('Open / Remarked / Done', f"{stats['open']} / {stats['remarked']} / {stats['done']}"),
     ]
     blocks = slack_util.build_report_blocks(
-        f"WIOM Recon — Daily Status ({now_ist().strftime('%d-%b-%Y')})",
+        f"WIOM GST Recon — Daily Status ({now_ist().strftime('%d-%b-%Y')})",
         kpis, by_state, by_reason, top_vendors)
-    text = f"WIOM Recon daily: ITC at risk ₹{stats['itc_risk']:,}, {stats['open']} open, {stats['done']} resolved"
+    text = f"WIOM GST Recon daily: ITC at risk ₹{stats['itc_risk']:,}, {stats['open']} open, {stats['done']} resolved"
     return slack_util.post_message(url, text, blocks)
 
 

@@ -47,5 +47,5 @@ def build_report_blocks(title, kpis, by_state, by_reason, top_vendors):
             f'• {g} {("· " + ven) if ven else ""} — grade *{gr}*, ITC risk ₹{risk:,.0f}'
             for g, ven, gr, risk in top_vendors)))
     blocks.append({'type': 'context', 'elements': [
-        {'type': 'mrkdwn', 'text': 'WIOM Recon · Books × GST · auto-generated'}]})
+        {'type': 'mrkdwn', 'text': 'WIOM GST Recon · Books × GST · auto-generated'}]})
     return blocks

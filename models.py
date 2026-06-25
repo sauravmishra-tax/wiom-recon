@@ -1,5 +1,5 @@
 """
-Database models for the WIOM Recon workflow system.
+Database models for the WIOM GST Recon workflow system.
 
 SQLAlchemy ORM — runs on SQLite locally, Postgres on cloud (same code).
 Tables:
