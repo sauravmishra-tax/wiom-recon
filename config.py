@@ -47,10 +47,8 @@ class Config:
     HOST = os.environ.get('HOST', '0.0.0.0')
 
     # ---- GST cache (vendor name fallback source) ----
-    GST_CACHE_PATH = os.environ.get(
-        'GST_CACHE_PATH',
-        r'C:\Users\Saurav Mishra\OneDrive\Desktop\Claude\GSTIN CHECK\gst_cache.json'
-    )
+    # On cloud: set GST_CACHE_PATH env var, or leave blank (cache lookup skipped gracefully)
+    GST_CACHE_PATH = os.environ.get('GST_CACHE_PATH', '')
 
 
 os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)

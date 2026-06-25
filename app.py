@@ -382,6 +382,11 @@ def run_reconciliation(file_path, period, label, user_id, run_state=None):
 
 # ======================================================================
 # PAGE ROUTES
+@app.route('/health')
+def health():
+    return 'ok', 200
+
+
 # ======================================================================
 @app.route('/')
 @login_required
