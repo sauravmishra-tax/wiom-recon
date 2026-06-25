@@ -537,6 +537,136 @@ def upload_from_zoho():
 
 
 # ======================================================================
+# ZOHO BROWSER AGENT  (server-side headless Playwright)
+# ======================================================================
+@app.route('/api/zoho/browser-fetch', methods=['POST'])
+@login_required
+def zoho_browser_fetch():
+    """Headless browser automation: login to Zoho Books, export GSTR-2B recon
+    Excel for the given period, then persist it as ReconRuns — one per state.
+    Runs entirely on the server; no local browser needed."""
+    data = request.get_json(force=True)
+    period  = (data.get('period') or '').strip()   # YYYY-MM
+    states  = data.get('states') or []
+    label   = (data.get('label') or '').strip()
+
+    if not period:
+        return jsonify({'ok': False, 'error': 'Period required (YYYY-MM)'}), 400
+
+    zoho_email    = get_setting('zoho_browser_email') or os.environ.get('ZOHO_EMAIL', '')
+    zoho_password = get_setting('zoho_browser_password') or os.environ.get('ZOHO_PASSWORD', '')
+    zoho_org_id   = get_setting('zoho_org_id') or os.environ.get('ZOHO_ORG_ID', '')
+
+    if not zoho_email or not zoho_password:
+        return jsonify({'ok': False,
+                        'error': 'Zoho login credentials not set. Add ZOHO_EMAIL and ZOHO_PASSWORD in Railway env vars or Settings.'}), 400
+
+    try:
+        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+    except ImportError:
+        return jsonify({'ok': False, 'error': 'Playwright not installed on server.'}), 500
+
+    import tempfile, threading
+    from persist import persist_run
+    from state_codes import state_from_gstin
+
+    yr, mo = period.split('-')
+    zoho_from = f'{mo}-{yr}'
+    zoho_to   = zoho_from
+
+    download_dir = tempfile.mkdtemp(prefix='wiom_zoho_')
+    excel_path   = None
+
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-dev-shm-usage'],
+            )
+            ctx = browser.new_context(accept_downloads=True)
+            page = ctx.new_page()
+
+            # --- Login ---
+            page.goto(f'https://books.zoho.in/app/{zoho_org_id}', timeout=30000)
+            page.wait_for_load_state('networkidle', timeout=15000)
+
+            if 'accounts.zoho' in page.url or 'login' in page.url.lower():
+                page.fill('#login_id', zoho_email, timeout=10000)
+                page.click('#nextbtn', timeout=5000)
+                page.wait_for_timeout(1500)
+                page.fill('#password', zoho_password, timeout=8000)
+                page.click('#nextbtn', timeout=5000)
+                page.wait_for_url(f'**/app/{zoho_org_id}**', timeout=30000)
+
+            # --- Navigate to GSTR-2B Reconciliation ---
+            recon_url = (
+                f'https://books.zoho.in/app/{zoho_org_id}'
+                f'#/gstfiling/tax/filings/reconciliation'
+                f'?from_date={zoho_from}&to_date={zoho_to}'
+                f'&tax_return_type=in_gstr2b_return'
+            )
+            page.goto(recon_url, timeout=30000)
+            page.wait_for_load_state('networkidle', timeout=20000)
+            page.wait_for_timeout(3000)
+
+            # --- Export as Excel ---
+            export_selectors = [
+                'button:has-text("Export")',
+                '[aria-label*="Export"]',
+                'button:has-text("Download")',
+                '[title*="Export"]',
+                '.export-btn',
+            ]
+            for sel in export_selectors:
+                try:
+                    page.click(sel, timeout=3000)
+                    break
+                except PWTimeout:
+                    continue
+
+            # Try clicking Excel option in dropdown
+            for sel in ['text=Excel', 'li:has-text("Excel")', '[data-value="xlsx"]']:
+                try:
+                    page.click(sel, timeout=3000)
+                    break
+                except PWTimeout:
+                    continue
+
+            with page.expect_download(timeout=30000) as dl_info:
+                pass
+            dl = dl_info.value
+            import os as _os
+            excel_path = _os.path.join(download_dir, dl.suggested_filename or f'gstr2b_{period}.xlsx')
+            dl.save_as(excel_path)
+            browser.close()
+
+    except Exception as e:
+        import shutil, traceback
+        shutil.rmtree(download_dir, ignore_errors=True)
+        return jsonify({'ok': False, 'error': f'Browser automation failed: {e}',
+                        'detail': traceback.format_exc()[-800:]}), 500
+
+    if not excel_path or not os.path.exists(excel_path):
+        return jsonify({'ok': False, 'error': 'Download did not complete — file not found.'}), 500
+
+    # --- Run reconciliation engine on downloaded file ---
+    try:
+        result = run_reconciliation(excel_path, period,
+                                    label or f'Zoho browser {period}',
+                                    current_user.id,
+                                    run_state=states[0] if len(states) == 1 else None)
+    except Exception as e:
+        import shutil
+        shutil.rmtree(download_dir, ignore_errors=True)
+        return jsonify({'ok': False, 'error': f'Recon engine error: {e}'}), 500
+
+    import shutil
+    shutil.rmtree(download_dir, ignore_errors=True)
+    return jsonify({'ok': True, 'period': period, 'run_id': result.get('run_id'),
+                    'rows': result.get('rows', 0), 'file': os.path.basename(excel_path)})
+
+
+# ======================================================================
 # SETTINGS + ZOHO LIVE INTEGRATION
 # ======================================================================
 def _zoho_creds():

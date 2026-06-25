@@ -53,7 +53,16 @@
         Zoho not configured. <a href="{{ url_for('settings') }}" style="color:#ff6b6b;text-decoration:underline;">Go to Settings → Zoho</a> and enter your API credentials first.
     </div>
 
-    <button class="btn green" id="zBtn" style="margin-top:18px;" onclick="fetchFromZoho()">⚡ Fetch from Zoho</button>
+    <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap;">
+        <button class="btn green" id="zBtn" onclick="fetchFromZoho()">⚡ Fetch via API</button>
+        <button class="btn" id="zBtnBrowser" onclick="fetchFromZohoBrowser()" style="background:rgba(124,92,255,.15);border:1px solid var(--purple,#7C5CFF);color:var(--purple,#7C5CFF);">
+            🌐 Fetch via Browser (server-side)
+        </button>
+    </div>
+    <div class="sub" style="margin-top:6px;">
+        <b>API</b> = uses Zoho API (fast, if data available) &nbsp;|&nbsp;
+        <b>Browser</b> = server opens Zoho Books headlessly, exports Excel automatically
+    </div>
 
     <!-- progress/result area -->
     <div id="zProgress" style="display:none;margin-top:18px;">
@@ -121,6 +130,64 @@ function refresh(){
     });
 }
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+
+function fetchFromZohoBrowser(){
+    const period = document.getElementById('zPeriod').value;
+    if(!period){alert('Select the return month first.');return;}
+    const sel = document.getElementById('zStates');
+    const states = Array.from(sel.selectedOptions).map(o=>o.value);
+    const label  = document.getElementById('zLabel').value.trim();
+
+    document.getElementById('zBtnBrowser').disabled = true;
+    document.getElementById('zBtn').disabled = true;
+    document.getElementById('zProgress').style.display = 'block';
+    document.getElementById('zResults').style.display = 'none';
+    document.getElementById('zohoNotCfg').style.display = 'none';
+    document.getElementById('zSpinner').style.display = 'inline-block';
+    document.getElementById('zStatus').textContent = 'Server opening Zoho Books headlessly... (may take 30-60 sec)';
+
+    fetch('/api/zoho/browser-fetch', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({period, states, label})
+    })
+    .then(r=>r.json())
+    .then(d=>{
+        document.getElementById('zSpinner').style.display = 'none';
+        document.getElementById('zBtn').disabled = false;
+        document.getElementById('zBtnBrowser').disabled = false;
+        if(!d.ok){
+            if(d.error && d.error.includes('credentials not set')){
+                document.getElementById('zohoNotCfg').style.display = 'block';
+                document.getElementById('zohoNotCfg').innerHTML = d.error + ' <a href="/settings" style="color:#ff6b6b;text-decoration:underline;">Go to Settings</a>';
+                document.getElementById('zProgress').style.display = 'none';
+            } else {
+                document.getElementById('zStatus').innerHTML = '<span style="color:var(--negc)">Failed: ' + escapeHtml(d.error) + '</span>';
+                if(d.detail) console.error(d.detail);
+            }
+            return;
+        }
+        document.getElementById('zStatus').textContent = 'Done! Run created.';
+        const res = document.getElementById('zResults');
+        res.style.display = 'block';
+        res.innerHTML = `
+        <div style="background:var(--dark3);border-radius:10px;padding:14px 16px;margin-top:10px;">
+            <div style="font-weight:600;color:var(--green);margin-bottom:8px;">Browser fetch complete for ${period}</div>
+            <div style="font-size:13px;color:var(--gray);line-height:2;">
+                File: <b>${d.file || 'gstr2b.xlsx'}</b><br>
+                Rows imported: <b>${d.rows || 0}</b>
+            </div>
+            <a href="/detail?run_id=${d.run_id}" class="btn green" style="margin-top:12px;display:inline-block;">
+                View Run ->
+            </a>
+        </div>`;
+    })
+    .catch(e=>{
+        document.getElementById('zBtn').disabled = false;
+        document.getElementById('zBtnBrowser').disabled = false;
+        document.getElementById('zStatus').textContent = 'Network error: ' + e.message;
+    });
+}
 
 // ===== ZOHO DIRECT FETCH =====
 function fetchFromZoho(){
