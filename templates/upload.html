@@ -29,10 +29,14 @@
     <h2 style="margin-bottom:4px;">⚡ Fetch Directly from Zoho Books</h2>
     <div class="sub" style="margin-bottom:18px;">No Excel needed — pulls GSTR-2B vs Books recon data live from Zoho Books API, state-wise, and creates runs automatically.</div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:end;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;align-items:end;">
         <div>
-            <label>Return Month (GSTR-2B period)</label>
-            <input type="month" id="zPeriod">
+            <label>From Period</label>
+            <input type="month" id="zFromPeriod">
+        </div>
+        <div>
+            <label>To Period</label>
+            <input type="month" id="zToPeriod">
         </div>
         <div>
             <label>States to fetch</label>
@@ -41,11 +45,11 @@
                 <option value="{{ s }}" selected>{{ s }}</option>
                 {% endfor %}
             </select>
-            <div class="sub" style="margin-top:4px;">Ctrl+click to select specific states. Default = all.</div>
+            <div class="sub" style="margin-top:4px;">Ctrl+click to select specific. Default = all.</div>
         </div>
         <div>
             <label>Label (optional)</label>
-            <input type="text" id="zLabel" placeholder="e.g. auto-sync Apr 26">
+            <input type="text" id="zLabel" placeholder="e.g. Q1 2026">
         </div>
     </div>
 
@@ -132,8 +136,11 @@ function refresh(){
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 
 function fetchFromZohoBrowser(){
-    const period = document.getElementById('zPeriod').value;
-    if(!period){alert('Select the return month first.');return;}
+    const from_period = document.getElementById('zFromPeriod').value;
+    const to_period   = document.getElementById('zToPeriod').value;
+    if(!from_period){alert('Select From Period first.');return;}
+    if(!to_period){alert('Select To Period first.');return;}
+    if(from_period > to_period){alert('From Period cannot be after To Period.');return;}
     const sel = document.getElementById('zStates');
     const states = Array.from(sel.selectedOptions).map(o=>o.value);
     const label  = document.getElementById('zLabel').value.trim();
@@ -144,12 +151,12 @@ function fetchFromZohoBrowser(){
     document.getElementById('zResults').style.display = 'none';
     document.getElementById('zohoNotCfg').style.display = 'none';
     document.getElementById('zSpinner').style.display = 'inline-block';
-    document.getElementById('zStatus').textContent = 'Server opening Zoho Books headlessly... (may take 30-60 sec)';
+    document.getElementById('zStatus').textContent = `Server opening Zoho Books headlessly for ${from_period} → ${to_period}... (may take 30-60 sec)`;
 
     fetch('/api/zoho/browser-fetch', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({period, states, label})
+        body: JSON.stringify({from_period, to_period, states, label})
     })
     .then(r=>r.json())
     .then(d=>{
@@ -172,7 +179,7 @@ function fetchFromZohoBrowser(){
         res.style.display = 'block';
         res.innerHTML = `
         <div style="background:var(--dark3);border-radius:10px;padding:14px 16px;margin-top:10px;">
-            <div style="font-weight:600;color:var(--green);margin-bottom:8px;">Browser fetch complete for ${period}</div>
+            <div style="font-weight:600;color:var(--green);margin-bottom:8px;">Browser fetch complete for ${from_period} → ${to_period}</div>
             <div style="font-size:13px;color:var(--gray);line-height:2;">
                 File: <b>${d.file || 'gstr2b.xlsx'}</b><br>
                 Rows imported: <b>${d.rows || 0}</b>
@@ -191,8 +198,11 @@ function fetchFromZohoBrowser(){
 
 // ===== ZOHO DIRECT FETCH =====
 function fetchFromZoho(){
-    const period = document.getElementById('zPeriod').value;
-    if(!period){alert('Select the return month first.');return;}
+    const from_period = document.getElementById('zFromPeriod').value;
+    const to_period   = document.getElementById('zToPeriod').value;
+    if(!from_period){alert('Select From Period first.');return;}
+    if(!to_period){alert('Select To Period first.');return;}
+    if(from_period > to_period){alert('From Period cannot be after To Period.');return;}
 
     const sel = document.getElementById('zStates');
     const states = Array.from(sel.selectedOptions).map(o=>o.value);
@@ -207,7 +217,7 @@ function fetchFromZoho(){
     fetch('/upload/from-zoho', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({period, states, label})
+        body: JSON.stringify({from_period, to_period, states, label})
     })
     .then(r=>r.json())
     .then(d=>{
@@ -222,12 +232,12 @@ function fetchFromZoho(){
             }
             return;
         }
-        document.getElementById('zStatus').textContent = `✅ Fetched for ${d.states.length} state(s)`;
+        document.getElementById('zStatus').textContent = `Fetched for ${d.states.length} state(s)`;
         const res = document.getElementById('zResults');
         res.style.display = 'block';
         res.innerHTML = `
         <div style="margin-bottom:10px;font-weight:600;color:var(--green)">
-            Import complete — ${d.states.length} run(s) created for ${period}
+            Import complete — ${d.states.length} run(s) created for ${from_period} to ${to_period}
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
         ${d.states.map(s=>`

@@ -451,89 +451,98 @@ def upload_from_zoho():
     from state_codes import state_from_gstin, code_for_state
 
     data = request.get_json(force=True)
-    period   = (data.get('period') or '').strip()        # YYYY-MM
-    states   = data.get('states') or []                  # ['Delhi','Haryana',...] or [] for all
-    label    = (data.get('label') or '').strip()
+    from_period = (data.get('from_period') or '').strip()   # YYYY-MM
+    to_period   = (data.get('to_period')   or '').strip()   # YYYY-MM
+    states      = data.get('states') or []
+    label       = (data.get('label') or '').strip()
 
-    if not period:
-        return jsonify({'ok': False, 'error': 'Period required (YYYY-MM)'}), 400
+    if not from_period or not to_period:
+        return jsonify({'ok': False, 'error': 'from_period and to_period required (YYYY-MM)'}), 400
+    if from_period > to_period:
+        return jsonify({'ok': False, 'error': 'from_period cannot be after to_period'}), 400
 
-    # Load Zoho creds
+    def _months_between(f, t):
+        fy, fm = int(f[:4]), int(f[5:7])
+        ty, tm = int(t[:4]), int(t[5:7])
+        months = []
+        while (fy, fm) <= (ty, tm):
+            months.append(f'{fy}-{fm:02d}')
+            fm += 1
+            if fm > 12:
+                fm = 1; fy += 1
+        return months
+
+    periods_list = _months_between(from_period, to_period)
+
     cfg = {k: get_setting(k) for k in ('zoho_client_id', 'zoho_client_secret',
                                          'zoho_refresh_token', 'zoho_org_id', 'zoho_region')}
     if not cfg.get('zoho_client_id') or not cfg.get('zoho_refresh_token'):
         return jsonify({'ok': False, 'error': 'Zoho not configured in Settings.'}), 400
 
-    try:
-        tok = zoho_mod.get_access_token(cfg['zoho_client_id'], cfg['zoho_client_secret'],
-                                         cfg['zoho_refresh_token'], cfg.get('zoho_region', 'in'))
-        gstr2b = zoho_mod.fetch_gstr2b(tok, cfg['zoho_org_id'],
-                                        cfg.get('zoho_region', 'in'), period)
-    except Exception as e:
-        return jsonify({'ok': False, 'error': f'Zoho fetch failed: {e}'}), 500
+    all_results = []
+    for period in periods_list:
+        try:
+            tok = zoho_mod.get_access_token(cfg['zoho_client_id'], cfg['zoho_client_secret'],
+                                             cfg['zoho_refresh_token'], cfg.get('zoho_region', 'in'))
+            gstr2b = zoho_mod.fetch_gstr2b(tok, cfg['zoho_org_id'],
+                                            cfg.get('zoho_region', 'in'), period)
+        except Exception as e:
+            return jsonify({'ok': False, 'error': f'Zoho fetch failed for {period}: {e}'}), 500
 
-    # Group all rows by state
-    all_entries = (
-        [(e, 'matched')    for e in gstr2b['matched']]   +
-        [(e, 'books_only') for e in gstr2b['books_only']] +
-        [(e, 'gstn_only')  for e in gstr2b['gstn_only']]  +
-        [(e, 'reconciled') for e in gstr2b['reconciled']]
-    )
-    if not all_entries:
-        return jsonify({'ok': False,
-                        'error': f'No data returned from Zoho for period {period}. '
-                                 f'Available keys: {gstr2b.get("_raw_keys", [])}'}), 400
-
-    # Figure out which states are present
-    state_map = {}   # state_name -> {matched, books_only, gstn_only, reconciled, vendor_map}
-    for e, cat in all_entries:
-        gstin = e.get('GSTIN', '')
-        _, sname = state_from_gstin(gstin)
-        if not sname:
-            sname = 'Unknown'
-        if states and sname not in states:
+        all_entries = (
+            [(e, 'matched')    for e in gstr2b['matched']]   +
+            [(e, 'books_only') for e in gstr2b['books_only']] +
+            [(e, 'gstn_only')  for e in gstr2b['gstn_only']]  +
+            [(e, 'reconciled') for e in gstr2b['reconciled']]
+        )
+        if not all_entries:
             continue
-        if sname not in state_map:
-            state_map[sname] = {'matched': [], 'books_only': [], 'gstn_only': [],
-                                 'reconciled': [], 'vendor_map': {}}
-        state_map[sname][cat].append(e)
-        if e.get('GSTIN') and e.get('Vendor'):
-            state_map[sname]['vendor_map'][e['GSTIN']] = e['Vendor']
 
-    if not state_map:
-        return jsonify({'ok': False, 'error': 'No entries for the selected state(s).'}), 400
+        state_map = {}
+        for e, cat in all_entries:
+            gstin = e.get('GSTIN', '')
+            _, sname = state_from_gstin(gstin)
+            if not sname:
+                sname = 'Unknown'
+            if states and sname not in states:
+                continue
+            if sname not in state_map:
+                state_map[sname] = {'matched': [], 'books_only': [], 'gstn_only': [],
+                                     'reconciled': [], 'vendor_map': {}}
+            state_map[sname][cat].append(e)
+            if e.get('GSTIN') and e.get('Vendor'):
+                state_map[sname]['vendor_map'][e['GSTIN']] = e['Vendor']
 
-    results = []
-    for sname, rows in state_map.items():
-        scode = code_for_state(sname)
-        run = ReconRun(
-            period=period, label=label or f'Zoho import {period}',
-            state=sname, uploaded_by_id=current_user.id)
-        db.session.add(run); db.session.flush()
+        for sname, rows in state_map.items():
+            run = ReconRun(
+                period=period, label=label or f'Zoho import {period}',
+                state=sname, uploaded_by_id=current_user.id)
+            db.session.add(run); db.session.flush()
 
-        inv_matched     = rows['matched'] + rows['reconciled']
-        books_unmatched = rows['books_only']
-        gstn_unmatched  = rows['gstn_only']
+            inv_matched     = rows['matched'] + rows['reconciled']
+            books_unmatched = rows['books_only']
+            gstn_unmatched  = rows['gstn_only']
 
-        n, carried = persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
-                                 vendor_map=rows['vendor_map'],
-                                 run_state=sname)
-        # Auto-approve already-reconciled rows from Zoho
-        approved = ReconRow.query.filter(
-            ReconRow.run_id == run.id,
-            ReconRow.recon_status.like('%Fully Reconciled%'),
-            ReconRow.status == 'open'
-        ).update({'status': 'approved'}, synchronize_session=False)
-        db.session.commit()
+            n, carried = persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
+                                     vendor_map=rows['vendor_map'], run_state=sname)
+            approved = ReconRow.query.filter(
+                ReconRow.run_id == run.id,
+                ReconRow.recon_status.like('%Fully Reconciled%'),
+                ReconRow.status == 'open'
+            ).update({'status': 'approved'}, synchronize_session=False)
+            db.session.commit()
 
-        results.append({'state': sname, 'run_id': run.id, 'rows': n,
-                        'carried': carried, 'auto_approved': approved,
-                        'matched': len(rows['matched']),
-                        'reconciled': len(rows['reconciled']),
-                        'books_only': len(books_unmatched),
-                        'gstn_only': len(gstn_unmatched)})
+            all_results.append({'state': sname, 'period': period, 'run_id': run.id,
+                                 'rows': n, 'carried': carried, 'auto_approved': approved,
+                                 'matched': len(rows['matched']),
+                                 'reconciled': len(rows['reconciled']),
+                                 'books_only': len(books_unmatched),
+                                 'gstn_only': len(gstn_unmatched)})
 
-    return jsonify({'ok': True, 'period': period, 'states': results})
+    if not all_results:
+        return jsonify({'ok': False, 'error': 'No data found for selected period range and states.'}), 400
+
+    return jsonify({'ok': True, 'from_period': from_period, 'to_period': to_period, 'states': all_results})
 
 
 # ======================================================================
@@ -546,12 +555,13 @@ def zoho_browser_fetch():
     Excel for the given period, then persist it as ReconRuns — one per state.
     Runs entirely on the server; no local browser needed."""
     data = request.get_json(force=True)
-    period  = (data.get('period') or '').strip()   # YYYY-MM
+    from_period = (data.get('from_period') or '').strip()   # YYYY-MM
+    to_period   = (data.get('to_period')   or '').strip()   # YYYY-MM
     states  = data.get('states') or []
     label   = (data.get('label') or '').strip()
 
-    if not period:
-        return jsonify({'ok': False, 'error': 'Period required (YYYY-MM)'}), 400
+    if not from_period or not to_period:
+        return jsonify({'ok': False, 'error': 'from_period and to_period required (YYYY-MM)'}), 400
 
     zoho_email    = get_setting('zoho_browser_email') or os.environ.get('ZOHO_EMAIL', '')
     zoho_password = get_setting('zoho_browser_password') or os.environ.get('ZOHO_PASSWORD', '')
@@ -570,9 +580,10 @@ def zoho_browser_fetch():
     from persist import persist_run
     from state_codes import state_from_gstin
 
-    yr, mo = period.split('-')
-    zoho_from = f'{mo}-{yr}'
-    zoho_to   = zoho_from
+    fy, fm = from_period.split('-')
+    ty, tm = to_period.split('-')
+    zoho_from = f'{fm}-{fy}'
+    zoho_to   = f'{tm}-{ty}'
 
     download_dir = tempfile.mkdtemp(prefix='wiom_zoho_')
     excel_path   = None
@@ -636,7 +647,7 @@ def zoho_browser_fetch():
                 pass
             dl = dl_info.value
             import os as _os
-            excel_path = _os.path.join(download_dir, dl.suggested_filename or f'gstr2b_{period}.xlsx')
+            excel_path = _os.path.join(download_dir, dl.suggested_filename or f'gstr2b_{from_period}_{to_period}.xlsx')
             dl.save_as(excel_path)
             browser.close()
 
@@ -651,8 +662,8 @@ def zoho_browser_fetch():
 
     # --- Run reconciliation engine on downloaded file ---
     try:
-        result = run_reconciliation(excel_path, period,
-                                    label or f'Zoho browser {period}',
+        result = run_reconciliation(excel_path, from_period,
+                                    label or f'Zoho browser {from_period} to {to_period}',
                                     current_user.id,
                                     run_state=states[0] if len(states) == 1 else None)
     except Exception as e:
@@ -662,7 +673,8 @@ def zoho_browser_fetch():
 
     import shutil
     shutil.rmtree(download_dir, ignore_errors=True)
-    return jsonify({'ok': True, 'period': period, 'run_id': result.get('run_id'),
+    return jsonify({'ok': True, 'from_period': from_period, 'to_period': to_period,
+                    'run_id': result.get('run_id'),
                     'rows': result.get('rows', 0), 'file': os.path.basename(excel_path)})
 
 
