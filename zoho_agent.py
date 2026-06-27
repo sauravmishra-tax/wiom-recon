@@ -116,7 +116,8 @@ def run_agent(from_period: str, to_period: str, states: list, headless: bool = F
                 page.fill('#password', ZOHO_PASSWORD, timeout=8000)
                 page.click('#nextbtn', timeout=5000)
                 print("       Waiting for login...")
-                page.wait_for_url(f'**/app/{ZOHO_ORG_ID}**', timeout=60000)
+                # Wait for either the app page OR an announcement/redirect page
+                page.wait_for_url(f'**{ZOHO_ORG_ID}**', timeout=60000)
             except PWTimeout:
                 # Try alternative selectors
                 try:
@@ -129,6 +130,18 @@ def run_agent(from_period: str, to_period: str, states: list, headless: bool = F
                 except Exception as e:
                     print(f"       Login issue -- browser is open, please log in manually.")
                     input("       Press Enter once you're logged into Zoho Books...")
+
+        # Handle Zoho announcement/notice pages (timezone-update, etc.)
+        if 'announcement' in page.url or 'accounts.zoho' in page.url:
+            print("       Skipping Zoho announcement page...")
+            recon_url_direct = RECON_URL_TEMPLATE.format(
+                base=ZOHO_BOOKS_URL,
+                org=ZOHO_ORG_ID,
+                from_date=fmt_zoho_date(from_period),
+                to_date=fmt_zoho_date(to_period),
+            )
+            page.goto(recon_url_direct, timeout=60000)
+            time.sleep(3)
 
         print("       OK Logged in")
 
