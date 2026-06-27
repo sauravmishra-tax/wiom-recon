@@ -65,11 +65,19 @@
     <div class="sub" style="margin-top:8px;">Server opens Zoho Books in a headless browser, exports the reconciliation Excel, and imports it automatically. Takes ~30–60 seconds.</div>
 
     <!-- progress/result area -->
-    <div id="zProgress" style="display:none;margin-top:18px;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-            <div class="spinner" id="zSpinner" style="width:18px;height:18px;border:3px solid var(--dark3);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-            <span id="zStatus" style="font-size:13px;color:var(--gray)">Connecting to Zoho…</span>
+    <div id="zProgress" style="display:none;margin-top:20px;">
+        <!-- progress bar -->
+        <div style="background:var(--dark3);border-radius:20px;height:8px;overflow:hidden;margin-bottom:12px;">
+            <div id="zBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--purple,#7C5CFF),#a78bfa);border-radius:20px;transition:width 0.6s ease;"></div>
         </div>
+        <!-- status row -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <div id="zSpinner" style="width:16px;height:16px;border:2.5px solid var(--dark3);border-top-color:var(--purple,#7C5CFF);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></div>
+            <span id="zStatus" style="font-size:13px;color:var(--gray)">Connecting to Zoho…</span>
+            <span id="zPct" style="margin-left:auto;font-size:12px;color:var(--purple,#7C5CFF);font-weight:600;"></span>
+        </div>
+        <!-- step log -->
+        <div id="zLog" style="background:#0d0d0d;border:1px solid var(--dark3);border-radius:8px;padding:10px 14px;font-family:ui-monospace,monospace;font-size:11.5px;color:var(--gray);line-height:1.8;max-height:140px;overflow-y:auto;display:none;"></div>
         <div id="zResults" style="display:none;"></div>
     </div>
 </div>
@@ -131,6 +139,44 @@ function refresh(){
 }
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 
+let _zProgressTimer = null;
+
+function _zLog(msg) {
+    const log = document.getElementById('zLog');
+    log.style.display = 'block';
+    const t = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    log.innerHTML += `<div><span style="color:#555">${t}</span> ${escapeHtml(msg)}</div>`;
+    log.scrollTop = log.scrollHeight;
+}
+
+function _zSetProgress(pct, msg) {
+    document.getElementById('zBar').style.width = pct + '%';
+    document.getElementById('zPct').textContent = pct + '%';
+    if(msg) { document.getElementById('zStatus').textContent = msg; _zLog(msg); }
+}
+
+function _zStartFakeProgress(from_period, to_period) {
+    const steps = [
+        [5,  'Connecting to Zoho Books…'],
+        [15, 'Logging in to Zoho Books…'],
+        [28, 'Opening GSTR-2B Reconciliation page…'],
+        [42, `Fetching data for ${from_period}…`],
+        [55, 'Exporting reconciliation Excel…'],
+        [68, 'Downloading Excel file…'],
+        [78, `Processing ${to_period !== from_period ? 'multiple months' : 'data'}…`],
+        [88, 'Importing rows into database…'],
+        [93, 'Almost done…'],
+    ];
+    let i = 0;
+    _zSetProgress(3, 'Starting headless browser…');
+    _zProgressTimer = setInterval(() => {
+        if(i < steps.length) {
+            _zSetProgress(steps[i][0], steps[i][1]);
+            i++;
+        }
+    }, 5500);
+}
+
 function fetchFromZohoBrowser(){
     const from_period = document.getElementById('zFromPeriod').value;
     const to_period   = document.getElementById('zToPeriod').value;
@@ -142,12 +188,16 @@ function fetchFromZohoBrowser(){
     const label  = document.getElementById('zLabel').value.trim();
 
     document.getElementById('zBtnBrowser').disabled = true;
-    document.getElementById('zBtn').disabled = true;
     document.getElementById('zProgress').style.display = 'block';
     document.getElementById('zResults').style.display = 'none';
+    document.getElementById('zLog').style.display = 'none';
+    document.getElementById('zLog').innerHTML = '';
     document.getElementById('zohoNotCfg').style.display = 'none';
     document.getElementById('zSpinner').style.display = 'inline-block';
-    document.getElementById('zStatus').textContent = `Server opening Zoho Books headlessly for ${from_period} → ${to_period}... (may take 30-60 sec)`;
+    document.getElementById('zBar').style.width = '0%';
+    document.getElementById('zPct').textContent = '';
+
+    _zStartFakeProgress(from_period, to_period);
 
     fetch('/api/zoho/browser-fetch', {
         method: 'POST',
@@ -156,39 +206,47 @@ function fetchFromZohoBrowser(){
     })
     .then(r=>r.json())
     .then(d=>{
+        clearInterval(_zProgressTimer);
         document.getElementById('zSpinner').style.display = 'none';
-        document.getElementById('zBtn').disabled = false;
         document.getElementById('zBtnBrowser').disabled = false;
         if(!d.ok){
+            _zSetProgress(0, '');
+            document.getElementById('zBar').style.background = 'var(--negc,#ff4d4d)';
             if(d.error && d.error.includes('credentials not set')){
                 document.getElementById('zohoNotCfg').style.display = 'block';
                 document.getElementById('zohoNotCfg').innerHTML = d.error + ' <a href="/settings" style="color:#ff6b6b;text-decoration:underline;">Go to Settings</a>';
                 document.getElementById('zProgress').style.display = 'none';
             } else {
-                document.getElementById('zStatus').innerHTML = '<span style="color:var(--negc)">Failed: ' + escapeHtml(d.error) + '</span>';
-                if(d.detail) console.error(d.detail);
+                document.getElementById('zStatus').innerHTML = '<span style="color:var(--negc)">❌ Failed: ' + escapeHtml(d.error||'Unknown error') + '</span>';
+                _zLog('❌ ' + (d.error||'Unknown error'));
+                if(d.detail) _zLog('Detail: ' + d.detail);
             }
             return;
         }
-        document.getElementById('zStatus').textContent = 'Done! Run created.';
+        _zSetProgress(100, '✅ Done! All data imported successfully.');
+        document.getElementById('zBar').style.background = 'linear-gradient(90deg,var(--green,#00c48c),#34d399)';
         const res = document.getElementById('zResults');
         res.style.display = 'block';
         res.innerHTML = `
-        <div style="background:var(--dark3);border-radius:10px;padding:14px 16px;margin-top:10px;">
-            <div style="font-weight:600;color:var(--green);margin-bottom:8px;">Browser fetch complete for ${from_period} → ${to_period}</div>
+        <div style="background:var(--dark3);border-radius:10px;padding:14px 16px;margin-top:12px;">
+            <div style="font-weight:600;color:var(--green);margin-bottom:8px;">✅ Fetch complete — ${from_period}${to_period !== from_period ? ' → ' + to_period : ''}</div>
             <div style="font-size:13px;color:var(--gray);line-height:2;">
                 File: <b>${d.file || 'gstr2b.xlsx'}</b><br>
                 Rows imported: <b>${d.rows || 0}</b>
             </div>
             <a href="/detail?run_id=${d.run_id}" class="btn green" style="margin-top:12px;display:inline-block;">
-                View Run ->
+                View Run →
             </a>
         </div>`;
     })
     .catch(e=>{
-        document.getElementById('zBtn').disabled = false;
+        clearInterval(_zProgressTimer);
         document.getElementById('zBtnBrowser').disabled = false;
-        document.getElementById('zStatus').textContent = 'Network error: ' + e.message;
+        document.getElementById('zSpinner').style.display = 'none';
+        document.getElementById('zBar').style.background = 'var(--negc,#ff4d4d)';
+        _zSetProgress(0, '');
+        document.getElementById('zStatus').innerHTML = '<span style="color:var(--negc)">❌ Network error: ' + escapeHtml(e.message) + '</span>';
+        _zLog('Network error: ' + e.message);
     });
 }
 
