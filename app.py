@@ -598,8 +598,8 @@ def zoho_browser_fetch():
             page = ctx.new_page()
 
             # --- Login ---
-            page.goto(f'https://books.zoho.in/app/{zoho_org_id}', timeout=30000)
-            page.wait_for_load_state('networkidle', timeout=15000)
+            page.goto(f'https://books.zoho.in/app/{zoho_org_id}', timeout=60000)
+            page.wait_for_load_state('networkidle', timeout=20000)
 
             if 'accounts.zoho' in page.url or 'login' in page.url.lower():
                 page.fill('#login_id', zoho_email, timeout=10000)
@@ -607,7 +607,20 @@ def zoho_browser_fetch():
                 page.wait_for_timeout(1500)
                 page.fill('#password', zoho_password, timeout=8000)
                 page.click('#nextbtn', timeout=5000)
-                page.wait_for_url(f'**/app/{zoho_org_id}**', timeout=30000)
+                # Wait for any URL containing org ID (handles announcement redirects too)
+                page.wait_for_url(f'**{zoho_org_id}**', timeout=60000)
+
+            # Skip Zoho announcement/notice pages (timezone-update etc.)
+            if 'announcement' in page.url or ('accounts.zoho' in page.url and zoho_org_id not in page.url):
+                recon_url_direct = (
+                    f'https://books.zoho.in/app/{zoho_org_id}'
+                    f'#/gstfiling/tax/filings/reconciliation'
+                    f'?from_date={zoho_from}&to_date={zoho_to}'
+                    f'&tax_return_type=in_gstr2b_return'
+                )
+                page.goto(recon_url_direct, timeout=60000)
+                page.wait_for_load_state('networkidle', timeout=20000)
+                page.wait_for_timeout(3000)
 
             # --- Navigate to GSTR-2B Reconciliation ---
             recon_url = (
@@ -616,35 +629,47 @@ def zoho_browser_fetch():
                 f'?from_date={zoho_from}&to_date={zoho_to}'
                 f'&tax_return_type=in_gstr2b_return'
             )
-            page.goto(recon_url, timeout=30000)
+            page.goto(recon_url, timeout=60000)
             page.wait_for_load_state('networkidle', timeout=20000)
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(4000)
 
             # --- Export as Excel ---
-            export_selectors = [
-                'button:has-text("Export")',
-                '[aria-label*="Export"]',
-                'button:has-text("Download")',
-                '[title*="Export"]',
-                '.export-btn',
-            ]
-            for sel in export_selectors:
-                try:
-                    page.click(sel, timeout=3000)
-                    break
-                except PWTimeout:
-                    continue
+            # Must set up download listener BEFORE clicking export button
+            with page.expect_download(timeout=90000) as dl_info:
+                export_clicked = False
+                export_selectors = [
+                    'button:has-text("Export")',
+                    '[aria-label*="Export"]',
+                    'button:has-text("Download")',
+                    '[title*="Export"]',
+                    '.export-btn',
+                    'a:has-text("Export")',
+                ]
+                for sel in export_selectors:
+                    try:
+                        page.click(sel, timeout=3000)
+                        export_clicked = True
+                        break
+                    except PWTimeout:
+                        continue
 
-            # Try clicking Excel option in dropdown
-            for sel in ['text=Excel', 'li:has-text("Excel")', '[data-value="xlsx"]']:
-                try:
-                    page.click(sel, timeout=3000)
-                    break
-                except PWTimeout:
-                    continue
+                # Try clicking Excel option in dropdown (after export button opens it)
+                if export_clicked:
+                    for sel in ['text=Excel', 'li:has-text("Excel")', '[data-value="xlsx"]', 'button:has-text("Excel")']:
+                        try:
+                            page.click(sel, timeout=4000)
+                            break
+                        except PWTimeout:
+                            continue
+                else:
+                    # Try direct Excel click as fallback
+                    for sel in ['text=Excel', 'li:has-text("Excel")', '[data-value="xlsx"]']:
+                        try:
+                            page.click(sel, timeout=3000)
+                            break
+                        except PWTimeout:
+                            continue
 
-            with page.expect_download(timeout=30000) as dl_info:
-                pass
             dl = dl_info.value
             import os as _os
             excel_path = _os.path.join(download_dir, dl.suggested_filename or f'gstr2b_{from_period}_{to_period}.xlsx')
