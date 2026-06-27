@@ -597,6 +597,14 @@ def zoho_browser_fetch():
             ctx = browser.new_context(accept_downloads=True)
             page = ctx.new_page()
 
+            # Intercept all network requests to Zoho APIs for diagnostics
+            _api_calls = []
+            def _on_request(req):
+                u = req.url
+                if ('zoho' in u or 'zohoapis' in u) and req.resource_type in ('xhr','fetch','document'):
+                    _api_calls.append(f'{req.method} {u[:120]}')
+            page.on('request', _on_request)
+
             # --- Login ---
             print(f'[zoho] goto login page, org={zoho_org_id}')
             page.goto(f'https://books.zoho.in/app/{zoho_org_id}', timeout=60000)
@@ -748,6 +756,13 @@ def zoho_browser_fetch():
                 page.wait_for_timeout(2000)
                 print(f'[zoho] url after nav: {page.url[:80]}')
 
+                # Log API calls made so far
+                _api_calls.clear()
+                page.wait_for_timeout(3000)  # let XHRs fire
+                print(f'[zoho] API calls ({len(_api_calls)}):')
+                for c in _api_calls[-20:]:
+                    print(f'[zoho]   {c}')
+
                 # Log ALL buttons + their inner SVG/icon text for this month
                 try:
                     all_btns_info = page.evaluate("""() => {
@@ -796,19 +811,40 @@ def zoho_browser_fetch():
                             continue
                     return None
 
+                # Log main content area buttons specifically (not sidebar)
+                try:
+                    content_btns = page.evaluate("""() => {
+                        // Exclude sidebar nav and chat buttons
+                        const sidebar_cls = ['accordion-button','add-new','chat-button','rhs-sidebar','collapse-expand'];
+                        const btns = document.querySelectorAll('button,[role="button"]');
+                        return Array.from(btns).filter(b => {
+                            const cls = b.className || '';
+                            return !sidebar_cls.some(s => cls.includes(s)) &&
+                                   !(b.getAttribute('aria-label')||'').includes('Close this side') &&
+                                   !(b.getAttribute('aria-label')||'').includes('Chat');
+                        }).map((b, i) => ({
+                            i, text:(b.innerText||'').trim().slice(0,30),
+                            title:(b.title||'').slice(0,30),
+                            aria:(b.getAttribute('aria-label')||'').slice(0,30),
+                            cls:(b.className||'').slice(0,50)
+                        }));
+                    }""")
+                    print(f'[zoho] content_btns ({len(content_btns or [])}): {content_btns}')
+                except Exception as cbe:
+                    print(f'[zoho] content_btns failed: {cbe}')
+
                 try:
                     with page.expect_download(timeout=40000) as dl_info:
                         clicked = _click_export(page)
                         if not clicked:
-                            print(f'[zoho] _click_export failed, trying icon buttons')
-                            # Try anonymous icon buttons inside expect_download context
-                            anon_btns_count = page.evaluate("""() => document.querySelectorAll('button').length""")
-                            for idx in range(min(anon_btns_count, 30)):
-                                try:
-                                    page.evaluate(f"""() => {{ const btns = document.querySelectorAll('button'); if(btns[{idx}]) btns[{idx}].click(); }}""")
-                                    page.wait_for_timeout(300)
-                                except Exception:
-                                    pass
+                            print(f'[zoho] _click_export failed for {month_period}')
+                            # Try ONLY the d-flex icon-button position-relative buttons (main toolbar)
+                            page.evaluate("""() => {
+                                const btns = Array.from(document.querySelectorAll('button.d-flex.icon-button'));
+                                console.log('[zoho] clicking', btns.length, 'd-flex icon buttons');
+                                btns.forEach((b, i) => setTimeout(() => b.click(), i * 400));
+                            }""")
+                            page.wait_for_timeout(len(content_btns or []) * 400 + 2000)
                     dl = dl_info.value
                     excel_path = os.path.join(download_dir, dl.suggested_filename or f'gstr2b_{month_period}.xlsx')
                     dl.save_as(excel_path)
