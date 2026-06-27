@@ -751,9 +751,33 @@ def zoho_browser_fetch():
                     })).filter(e => e.text || e.href);
                 }""")
                 for fl in (filing_links or []):
-                    print(f'[zoho] FILING_LINK: tag={fl["tag"]} text="{fl["text"]}" href="{fl["href"][:60]}" cls="{fl["cls"][:30]}"')
+                    if 'gst' in fl.get('href','').lower() or 'reconcil' in fl.get('href','').lower() or 'reconcil' in fl.get('text','').lower() or 'gstr' in fl.get('text','').lower():
+                        print(f'[zoho] FILING_LINK: tag={fl["tag"]} text="{fl["text"]}" href="{fl["href"][:80]}"')
             except Exception as fle:
                 print(f'[zoho] filing links eval failed: {fle}')
+
+            # Log FULL content area of GST filings page
+            try:
+                content_html = page.evaluate("""() => {
+                    // Find the main content area (not sidebar)
+                    const mainArea = document.querySelector('.main-area, .content-area, [class*="main-content"], .ember-application > .ember-view > div > div:last-child');
+                    if (mainArea) return mainArea.innerHTML.slice(0, 3000);
+                    // Fallback: find elements with gst/reconciliation text
+                    const allText = document.body.innerHTML;
+                    const idx = allText.toLowerCase().indexOf('reconcil');
+                    if (idx >= 0) return allText.slice(Math.max(0,idx-100), idx+500);
+                    return 'No reconciliation text found in page';
+                }""")
+                print(f'[zoho] CONTENT_HTML: {content_html}')
+                # Also find any links with gst/reconcil/gstr2b in their href
+                gst_links = page.evaluate("""() => {
+                    return Array.from(document.querySelectorAll('a')).filter(a =>
+                        /gst|reconcil|gstr/i.test(a.href || a.getAttribute('href') || '')
+                    ).map(a => ({text:(a.innerText||'').trim().slice(0,50), href:(a.href||'').slice(0,100)}));
+                }""")
+                print(f'[zoho] GST_LINKS: {gst_links}')
+            except Exception as che:
+                print(f'[zoho] content html failed: {che}')
 
             # Export month by month; use first successful file
             for month_period in months:
