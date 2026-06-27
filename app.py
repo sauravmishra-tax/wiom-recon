@@ -689,15 +689,57 @@ def zoho_browser_fetch():
                     print(f'[zoho] BTN text="{b["text"]}" title="{b["title"]}" aria="{b["aria"]}" cls="{b["cls"][:35]}" html="{b["html"][:80]}"')
             except Exception as dbg_e:
                 print(f'[zoho] debug eval failed: {dbg_e}')
-            # Also log main content toolbar HTML
+            # Log main content area to understand page structure
             try:
-                toolbar_html = page.evaluate("""() => {
-                    const toolbar = document.querySelector('.page-header,.toolbar,.list-header,[class*="header"],[class*="toolbar"]');
-                    return toolbar ? toolbar.outerHTML.slice(0, 2000) : 'no toolbar found';
+                content_info = page.evaluate("""() => {
+                    // Get table rows in main content
+                    const rows = document.querySelectorAll('table tr, .list-item, [class*="row"], .reconciliation-row');
+                    const rowTexts = Array.from(rows).slice(0,10).map(r => (r.innerText||'').trim().slice(0,80));
+                    // Get main content area HTML
+                    const main = document.querySelector('.main-content, #content, [class*="content"], .ember-view > div:last-child');
+                    return {
+                        rowCount: rows.length,
+                        rows: rowTexts,
+                        mainCls: main ? main.className.slice(0,60) : 'none'
+                    };
                 }""")
-                print(f'[zoho] TOOLBAR_HTML: {toolbar_html}')
+                print(f'[zoho] CONTENT: rowCount={content_info["rowCount"]} rows={content_info["rows"]} mainCls={content_info["mainCls"]}')
             except Exception as dbg_e:
-                print(f'[zoho] toolbar html eval failed: {dbg_e}')
+                print(f'[zoho] content eval failed: {dbg_e}')
+
+            # The reconciliation LIST page shows months — need to click into a specific month
+            # to get the export button. Try clicking first data row in reconciliation table.
+            try:
+                clicked_row = page.evaluate("""() => {
+                    // Look for clickable month rows in the reconciliation list
+                    const rows = document.querySelectorAll('tr[class*="cursor"], tr.clickable, tbody tr, .list-row, [class*="recon"] tr');
+                    for (const row of rows) {
+                        const t = (row.innerText||'').trim();
+                        if (t && !t.toLowerCase().includes('header') && t.length > 2) {
+                            row.click();
+                            return t.slice(0, 60);
+                        }
+                    }
+                    // Fallback: click first link inside main content that looks like a period
+                    const links = document.querySelectorAll('.list-body a, .list-item a, table a');
+                    if (links.length > 0) { links[0].click(); return 'clicked link: ' + (links[0].innerText||links[0].href||'').slice(0,40); }
+                    return null;
+                }""")
+                if clicked_row:
+                    print(f'[zoho] clicked row: {clicked_row}')
+                    page.wait_for_timeout(8000)
+                    # Now check if export button appeared
+                    export_present = page.evaluate("""() => {
+                        const all = document.querySelectorAll('button,[role="button"]');
+                        for (const el of all) {
+                            const t = ((el.innerText||'') + ' ' + (el.title||'') + ' ' + (el.getAttribute('aria-label')||'')).toLowerCase();
+                            if (t.includes('export')) return t.slice(0,40);
+                        }
+                        return null;
+                    }""")
+                    print(f'[zoho] export after row click: {export_present}')
+            except Exception as row_e:
+                print(f'[zoho] row click failed: {row_e}')
 
             # --- Export as Excel ---
             # Case-insensitive JS search across text/title/aria-label for export/download button
