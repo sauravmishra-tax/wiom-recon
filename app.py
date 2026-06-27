@@ -598,29 +598,26 @@ def zoho_browser_fetch():
             page = ctx.new_page()
 
             # --- Login ---
+            print(f'[zoho] goto login page, org={zoho_org_id}')
             page.goto(f'https://books.zoho.in/app/{zoho_org_id}', timeout=60000)
-            page.wait_for_load_state('networkidle', timeout=20000)
+            page.wait_for_timeout(3000)
+            print(f'[zoho] after goto, url={page.url[:80]}')
 
             if 'accounts.zoho' in page.url or 'login' in page.url.lower():
+                print('[zoho] login page detected, filling credentials')
                 page.fill('#login_id', zoho_email, timeout=10000)
                 page.click('#nextbtn', timeout=5000)
                 page.wait_for_timeout(1500)
                 page.fill('#password', zoho_password, timeout=8000)
                 page.click('#nextbtn', timeout=5000)
-                # Wait for any URL containing org ID (handles announcement redirects too)
+                print('[zoho] waiting for post-login redirect...')
                 page.wait_for_url(f'**{zoho_org_id}**', timeout=60000)
+                print(f'[zoho] post-login url={page.url[:80]}')
 
             # Skip Zoho announcement/notice pages (timezone-update etc.)
             if 'announcement' in page.url or ('accounts.zoho' in page.url and zoho_org_id not in page.url):
-                recon_url_direct = (
-                    f'https://books.zoho.in/app/{zoho_org_id}'
-                    f'#/gstfiling/tax/filings/reconciliation'
-                    f'?from_date={zoho_from}&to_date={zoho_to}'
-                    f'&tax_return_type=in_gstr2b_return'
-                )
-                page.goto(recon_url_direct, timeout=60000)
-                page.wait_for_load_state('networkidle', timeout=20000)
-                page.wait_for_timeout(3000)
+                print(f'[zoho] announcement page detected, skipping: {page.url[:80]}')
+                page.wait_for_timeout(1000)
 
             # --- Navigate to GSTR-2B Reconciliation ---
             recon_url = (
@@ -629,9 +626,10 @@ def zoho_browser_fetch():
                 f'?from_date={zoho_from}&to_date={zoho_to}'
                 f'&tax_return_type=in_gstr2b_return'
             )
+            print(f'[zoho] navigating to recon_url')
             page.goto(recon_url, timeout=60000)
-            page.wait_for_load_state('networkidle', timeout=20000)
-            page.wait_for_timeout(4000)
+            page.wait_for_timeout(5000)
+            print(f'[zoho] recon page loaded, url={page.url[:80]}')
 
             # --- Export as Excel ---
             # Must set up download listener BEFORE clicking export button
@@ -678,9 +676,12 @@ def zoho_browser_fetch():
 
     except Exception as e:
         import shutil, traceback
+        tb = traceback.format_exc()
+        print(f'[zoho] EXCEPTION: {e}\n{tb}')
         shutil.rmtree(download_dir, ignore_errors=True)
-        return jsonify({'ok': False, 'error': f'Browser automation failed: {e}',
-                        'detail': traceback.format_exc()[-800:]}), 500
+        err_msg = str(e) or repr(e) or 'Browser automation exception (see server logs)'
+        return jsonify({'ok': False, 'error': f'Browser automation failed: {err_msg}',
+                        'detail': tb[-800:]}), 500
 
     if not excel_path or not os.path.exists(excel_path):
         return jsonify({'ok': False, 'error': 'Download did not complete — file not found.'}), 500
