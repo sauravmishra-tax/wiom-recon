@@ -697,20 +697,64 @@ def zoho_browser_fetch():
                 }""")
                 if found:
                     print(f'[zoho] export btn clicked: {found}')
-                    pg.wait_for_timeout(1000)
-                    # Click Excel option in dropdown
+                    pg.wait_for_timeout(1500)
+                    # Log all visible dropdown items for diagnosis
+                    try:
+                        dropdown_items = pg.evaluate("""() => {
+                            const items = document.querySelectorAll(
+                                '.dropdown-menu a, .dropdown-menu li, .dropdown-menu .dropdown-item, '
+                                + '.dropdown-menu button, [role="menuitem"], [role="option"], '
+                                + '.ember-power-select-option, .dropdown-menu .disabled'
+                            );
+                            return Array.from(items).map(el => ({
+                                t:(el.innerText||el.textContent||'').trim().slice(0,40),
+                                cls:(el.className||'').slice(0,40),
+                                tag: el.tagName
+                            }));
+                        }""")
+                        print(f'[zoho] dropdown_items: {dropdown_items}')
+                    except Exception:
+                        pass
+                    # Click Excel option in dropdown (try multiple patterns)
                     excel = pg.evaluate("""() => {
-                        const all = document.querySelectorAll('li,a,button,[role="menuitem"],[role="option"]');
-                        for (const el of all) {
-                            const t = (el.innerText||el.textContent||'').trim().toLowerCase();
-                            if (t === 'excel' || t.includes('excel') || t.includes('.xlsx')) {
-                                el.click();
-                                return (el.innerText||'excel').slice(0,30);
+                        const selectors = [
+                            '.dropdown-menu a',
+                            '.dropdown-menu li',
+                            '.dropdown-menu .dropdown-item',
+                            '.dropdown-menu button',
+                            '[role="menuitem"]',
+                            '[role="option"]',
+                            'li,a,button'
+                        ];
+                        for (const sel of selectors) {
+                            for (const el of document.querySelectorAll(sel)) {
+                                const t = (el.innerText||el.textContent||'').trim().toLowerCase();
+                                if (t && (t === 'excel' || /\\bexcel\\b/.test(t) || t.includes('.xlsx') || t === 'xlsx')) {
+                                    el.click();
+                                    return (el.innerText||'excel').slice(0,30);
+                                }
                             }
+                        }
+                        // If only one dropdown item, click it regardless
+                        const ddItems = document.querySelectorAll('.dropdown-menu a, .dropdown-menu .dropdown-item');
+                        if (ddItems.length === 1) {
+                            ddItems[0].click();
+                            return 'only-item:' + (ddItems[0].innerText||'').trim().slice(0,20);
                         }
                         return null;
                     }""")
                     print(f'[zoho] excel option: {excel}')
+                    if not excel:
+                        # Last resort: try Playwright locators for visible dropdown items
+                        for xsel in ['text=Excel', 'text=xlsx', 'text=XLSX',
+                                     '.dropdown-menu a >> nth=0',
+                                     '.dropdown-menu .dropdown-item >> nth=0']:
+                            try:
+                                pg.click(xsel, timeout=1000)
+                                print(f'[zoho] fallback excel click: {xsel}')
+                                break
+                            except PWTimeout:
+                                continue
                     return True
                 # CSS fallbacks
                 for sel in ['button:has-text("Export")', '[title="Export"]', '[aria-label="Export"]',
