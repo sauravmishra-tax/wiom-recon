@@ -653,191 +653,130 @@ def zoho_browser_fetch():
                     continue
                 break
 
-            # --- Navigate to GSTR-2B Reconciliation ---
-            recon_url = (
-                f'https://books.zoho.in/app/{zoho_org_id}'
-                f'#/gstfiling/tax/filings/reconciliation'
-                f'?from_date={zoho_from}&to_date={zoho_to}'
-                f'&tax_return_type=in_gstr2b_return'
-            )
-            print(f'[zoho] navigating to recon_url')
-            page.goto(recon_url, timeout=60000)
-            page.wait_for_timeout(5000)
-            # Wait for reconciliation toolbar to have actual buttons (not just empty Ember comments)
-            # The btn-toolbar btn-group needs at least one real button to appear
-            try:
-                page.wait_for_selector('.btn-toolbar button, .list-header button, .page-header button', timeout=25000)
-                print('[zoho] toolbar buttons appeared')
-            except PWTimeout:
-                print('[zoho] toolbar buttons wait timed out, continuing anyway')
-            page.wait_for_timeout(2000)
-            print(f'[zoho] recon page loaded, url={page.url[:80]}')
+            # --- Navigate to GSTR-2B Reconciliation and Export (one month at a time) ---
+            # Zoho Books reconciliation works per-month; we iterate each month in the range.
+            import datetime as _dt
+            def _month_range(fp, tp):
+                y0, m0 = int(fp[:4]), int(fp[5:])
+                y1, m1 = int(tp[:4]), int(tp[5:])
+                months = []
+                y, m = y0, m0
+                while (y, m) <= (y1, m1):
+                    months.append(f'{y:04d}-{m:02d}')
+                    m += 1
+                    if m > 12:
+                        m = 1; y += 1
+                return months
 
-            # Debug: dump ALL buttons with their title/aria/text to find export button
-            try:
-                all_btns = page.evaluate("""() => {
-                    const all = document.querySelectorAll('button,[role="button"]');
-                    return Array.from(all).map(e => ({
-                        text: (e.innerText||e.textContent||'').trim().slice(0,50),
-                        title: (e.title||'').slice(0,50),
-                        aria: (e.getAttribute('aria-label')||'').slice(0,50),
-                        cls: (e.className||'').slice(0,60),
-                        html: e.outerHTML.slice(0,120)
-                    }));
-                }""")
-                for b in (all_btns or []):
-                    print(f'[zoho] BTN text="{b["text"]}" title="{b["title"]}" aria="{b["aria"]}" cls="{b["cls"][:35]}" html="{b["html"][:80]}"')
-            except Exception as dbg_e:
-                print(f'[zoho] debug eval failed: {dbg_e}')
-            # Log main content area to understand page structure
-            try:
-                content_info = page.evaluate("""() => {
-                    // Get table rows in main content
-                    const rows = document.querySelectorAll('table tr, .list-item, [class*="row"], .reconciliation-row');
-                    const rowTexts = Array.from(rows).slice(0,10).map(r => (r.innerText||'').trim().slice(0,80));
-                    // Get main content area HTML
-                    const main = document.querySelector('.main-content, #content, [class*="content"], .ember-view > div:last-child');
-                    return {
-                        rowCount: rows.length,
-                        rows: rowTexts,
-                        mainCls: main ? main.className.slice(0,60) : 'none'
-                    };
-                }""")
-                print(f'[zoho] CONTENT: rowCount={content_info["rowCount"]} rows={content_info["rows"]} mainCls={content_info["mainCls"]}')
-                # Log HTML of first 3 rows to see structure
-                row_htmls = page.evaluate("""() => {
-                    const rows = document.querySelectorAll('table tr, .list-item, [class*="row"]');
-                    return Array.from(rows).slice(0,3).map(r => r.outerHTML.slice(0,300));
-                }""")
-                for i, rh in enumerate(row_htmls or []):
-                    print(f'[zoho] ROW{i}: {rh}')
-            except Exception as dbg_e:
-                print(f'[zoho] content eval failed: {dbg_e}')
+            months = _month_range(from_period, to_period)
+            print(f'[zoho] will export months: {months}')
 
-            # The reconciliation LIST page shows months — need to click into a specific month
-            # to get the export button. Try clicking first data row in reconciliation table.
-            try:
-                clicked_row = page.evaluate("""() => {
-                    // Look for clickable month rows in the reconciliation list
-                    const rows = document.querySelectorAll('tr[class*="cursor"], tr.clickable, tbody tr, .list-row, [class*="recon"] tr');
-                    for (const row of rows) {
-                        const t = (row.innerText||'').trim();
-                        if (t && !t.toLowerCase().includes('header') && t.length > 2) {
-                            row.click();
-                            return t.slice(0, 60);
-                        }
-                    }
-                    // Fallback: click first link inside main content that looks like a period
-                    const links = document.querySelectorAll('.list-body a, .list-item a, table a');
-                    if (links.length > 0) { links[0].click(); return 'clicked link: ' + (links[0].innerText||links[0].href||'').slice(0,40); }
-                    return null;
-                }""")
-                if clicked_row:
-                    print(f'[zoho] clicked row: {clicked_row}')
-                    page.wait_for_timeout(8000)
-                    # Now check if export button appeared
-                    export_present = page.evaluate("""() => {
-                        const all = document.querySelectorAll('button,[role="button"]');
-                        for (const el of all) {
-                            const t = ((el.innerText||'') + ' ' + (el.title||'') + ' ' + (el.getAttribute('aria-label')||'')).toLowerCase();
-                            if (t.includes('export')) return t.slice(0,40);
-                        }
-                        return null;
-                    }""")
-                    print(f'[zoho] export after row click: {export_present}')
-            except Exception as row_e:
-                print(f'[zoho] row click failed: {row_e}')
-
-            # --- Export as Excel ---
-            # Case-insensitive JS search across text/title/aria-label for export/download button
-            export_btn_found = page.evaluate("""() => {
-                const all = document.querySelectorAll('button,a,[role="button"]');
-                for (const el of all) {
-                    const t = ((el.innerText||el.textContent||'').trim() + ' ' +
-                               (el.title||'') + ' ' +
-                               (el.getAttribute('aria-label')||'')).toLowerCase();
-                    if (t.includes('export') || t.includes('download')) {
-                        el.click();
-                        return (el.innerText||el.title||el.getAttribute('aria-label')||el.className||'found').slice(0,60);
-                    }
-                }
-                return null;
-            }""")
-            print(f'[zoho] JS export click: {export_btn_found}')
-
-            if not export_btn_found:
-                for sel in ['button:has-text("Export")', '[aria-label="Export"]',
-                            '[title="Export"]', '[title*="Export"]',
-                            'button:has-text("Download")', '[title*="Download"]',
-                            '.export-btn', 'a:has-text("Export")', '[class*="export"]']:
-                    try:
-                        page.click(sel, timeout=2000)
-                        export_btn_found = sel
-                        print(f'[zoho] CSS export clicked: {sel}')
-                        break
-                    except PWTimeout:
-                        continue
-
-            # Wait for dropdown to appear
-            page.wait_for_timeout(1200)
-
-            # Log what's visible in dropdown now
-            try:
-                dropdown_items = page.evaluate("""() => {
-                    const all = document.querySelectorAll('li,a,[role="menuitem"],[role="option"],[class*="dropdown"] *');
-                    return Array.from(all).slice(0,20).map(e => (e.innerText||e.textContent||'').trim().slice(0,50)).filter(Boolean);
-                }""")
-                print(f'[zoho] dropdown items: {dropdown_items}')
-            except Exception:
-                pass
-
-            # Step 2: Set up download listener THEN click Excel (download is triggered by Excel click)
-            print(f'[zoho] setting up download listener and clicking Excel...')
-            with page.expect_download(timeout=90000) as dl_info:
-                excel_clicked = page.evaluate("""() => {
-                    const all = document.querySelectorAll('li,a,button,[role="menuitem"],[role="option"]');
+            def _click_export(pg):
+                """Click Export button then Excel option; returns True if download triggered."""
+                # Find export button (case-insensitive, checks text/title/aria)
+                found = pg.evaluate("""() => {
+                    const all = document.querySelectorAll('button,a,[role="button"]');
                     for (const el of all) {
-                        const t = (el.innerText||el.textContent||'').trim().toLowerCase();
-                        if (t === 'excel' || t === '.xlsx' || t.includes('excel')) {
+                        const t = ((el.innerText||el.textContent||'').trim() + ' ' +
+                                   (el.title||'') + ' ' +
+                                   (el.getAttribute('aria-label')||'')).toLowerCase();
+                        if (/\\bexport\\b/.test(t) || /\\bdownload\\b/.test(t)) {
                             el.click();
-                            return (el.innerText||'excel-found').slice(0,40);
+                            return (el.innerText||el.title||el.getAttribute('aria-label')||el.className||'found').slice(0,60);
                         }
                     }
                     return null;
                 }""")
-                print(f'[zoho] JS excel click: {excel_clicked}')
-
-                if not excel_clicked:
-                    for sel in ['text=Excel', 'li:has-text("Excel")', '[data-value="xlsx"]',
-                                'button:has-text("Excel")', 'a:has-text("Excel")', '.xlsx']:
-                        try:
-                            page.click(sel, timeout=2000)
-                            print(f'[zoho] CSS excel clicked: {sel}')
-                            excel_clicked = sel
-                            break
-                        except PWTimeout:
-                            continue
-
-                if not excel_clicked:
-                    # Last resort: try clicking Export again (might directly download)
-                    print('[zoho] no Excel option found, trying Export click again inside download context')
-                    export_btn_found2 = page.evaluate("""() => {
-                        const all = document.querySelectorAll('button,a,[role="button"]');
+                if found:
+                    print(f'[zoho] export btn clicked: {found}')
+                    pg.wait_for_timeout(1000)
+                    # Click Excel option in dropdown
+                    excel = pg.evaluate("""() => {
+                        const all = document.querySelectorAll('li,a,button,[role="menuitem"],[role="option"]');
                         for (const el of all) {
-                            const t = (el.innerText||el.textContent||'').toLowerCase().trim();
-                            if (t.includes('export') || t.includes('download')) {
+                            const t = (el.innerText||el.textContent||'').trim().toLowerCase();
+                            if (t === 'excel' || t.includes('excel') || t.includes('.xlsx')) {
                                 el.click();
-                                return (el.innerText||'found').slice(0,40);
+                                return (el.innerText||'excel').slice(0,30);
                             }
                         }
                         return null;
                     }""")
-                    print(f'[zoho] retry export click: {export_btn_found2}')
+                    print(f'[zoho] excel option: {excel}')
+                    return True
+                # CSS fallbacks
+                for sel in ['button:has-text("Export")', '[title="Export"]', '[aria-label="Export"]',
+                            '[title*="Export"]', '.export-btn']:
+                    try:
+                        pg.click(sel, timeout=1500)
+                        print(f'[zoho] CSS export: {sel}')
+                        pg.wait_for_timeout(1000)
+                        for xsel in ['text=Excel', 'li:has-text("Excel")', '[data-value="xlsx"]']:
+                            try:
+                                pg.click(xsel, timeout=1500)
+                                print(f'[zoho] CSS excel: {xsel}')
+                                return True
+                            except PWTimeout:
+                                continue
+                        return True
+                    except PWTimeout:
+                        continue
+                return False
 
-            dl = dl_info.value
-            import os as _os
-            excel_path = _os.path.join(download_dir, dl.suggested_filename or f'gstr2b_{from_period}_{to_period}.xlsx')
-            dl.save_as(excel_path)
+            # Export month by month; use first successful file
+            for month_period in months:
+                mm, yy = month_period[5:], month_period[:4]
+                single_from = f'{mm}-{yy}'   # MM-YYYY
+                single_to   = f'{mm}-{yy}'
+                recon_url = (
+                    f'https://books.zoho.in/app/{zoho_org_id}'
+                    f'#/gstfiling/tax/filings/reconciliation'
+                    f'?from_date={single_from}&to_date={single_to}'
+                    f'&tax_return_type=in_gstr2b_return'
+                )
+                print(f'[zoho] navigating to recon for {month_period}: {recon_url[:80]}')
+                page.goto(recon_url, timeout=60000)
+                page.wait_for_timeout(5000)
+
+                # Wait for reconciliation content to render (any button inside list-header)
+                try:
+                    page.wait_for_selector('.btn-toolbar button, .list-header button', timeout=20000)
+                    print(f'[zoho] toolbar ready for {month_period}')
+                except PWTimeout:
+                    print(f'[zoho] toolbar timeout for {month_period}, trying anyway')
+
+                page.wait_for_timeout(2000)
+                print(f'[zoho] url after nav: {page.url[:80]}')
+
+                # Log toolbar buttons for this month
+                try:
+                    toolbar_btns = page.evaluate("""() => {
+                        const btns = document.querySelectorAll('.btn-toolbar button, .list-header button, .btn-group button');
+                        return Array.from(btns).map(b => ({
+                            text:(b.innerText||'').trim().slice(0,40),
+                            title:(b.title||'').slice(0,40),
+                            aria:(b.getAttribute('aria-label')||'').slice(0,40),
+                            cls:(b.className||'').slice(0,50)
+                        }));
+                    }""")
+                    print(f'[zoho] toolbar_btns for {month_period}: {toolbar_btns}')
+                except Exception:
+                    pass
+
+                # Try export with download listener
+                try:
+                    with page.expect_download(timeout=45000) as dl_info:
+                        if not _click_export(page):
+                            print(f'[zoho] export btn not found for {month_period}')
+                    dl = dl_info.value
+                    excel_path = os.path.join(download_dir, dl.suggested_filename or f'gstr2b_{month_period}.xlsx')
+                    dl.save_as(excel_path)
+                    print(f'[zoho] downloaded: {excel_path}')
+                    break  # Got a file — use it (run_reconciliation handles multi-state)
+                except PWTimeout:
+                    print(f'[zoho] download timeout for {month_period}, trying next month')
+                    continue
+
             browser.close()
 
     except Exception as e:
