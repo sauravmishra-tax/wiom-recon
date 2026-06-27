@@ -748,31 +748,72 @@ def zoho_browser_fetch():
                 page.wait_for_timeout(2000)
                 print(f'[zoho] url after nav: {page.url[:80]}')
 
-                # Log toolbar buttons for this month
+                # Log ALL buttons + their inner SVG/icon text for this month
                 try:
-                    toolbar_btns = page.evaluate("""() => {
-                        const btns = document.querySelectorAll('.btn-toolbar button, .list-header button, .btn-group button');
+                    all_btns_info = page.evaluate("""() => {
+                        const btns = document.querySelectorAll('button,[role="button"]');
                         return Array.from(btns).map(b => ({
-                            text:(b.innerText||'').trim().slice(0,40),
+                            text:(b.innerText||b.textContent||'').trim().slice(0,40),
                             title:(b.title||'').slice(0,40),
                             aria:(b.getAttribute('aria-label')||'').slice(0,40),
-                            cls:(b.className||'').slice(0,50)
+                            cls:(b.className||'').slice(0,60),
+                            html: b.outerHTML.slice(0,150)
                         }));
                     }""")
-                    print(f'[zoho] toolbar_btns for {month_period}: {toolbar_btns}')
+                    for bi in (all_btns_info or []):
+                        print(f'[zoho] BTN2 text="{bi["text"]}" title="{bi["title"]}" aria="{bi["aria"]}" cls="{bi["cls"][:40]}" html="{bi["html"][:100]}"')
                 except Exception:
                     pass
 
-                # Try export with download listener
+                # Log accessibility snapshot to find export button
                 try:
-                    with page.expect_download(timeout=45000) as dl_info:
-                        if not _click_export(page):
-                            print(f'[zoho] export btn not found for {month_period}')
+                    snap = page.accessibility.snapshot()
+                    import json as _json
+                    print(f'[zoho] A11Y: {_json.dumps(snap)[:3000]}')
+                except Exception as ae:
+                    print(f'[zoho] a11y failed: {ae}')
+
+                # Try export: first try _click_export, then try ALL anonymous icon buttons
+                def _try_all_icon_btns_for_download(pg, timeout_ms=30000):
+                    """Try clicking each anonymous icon button and see if download fires."""
+                    icon_btns = pg.evaluate("""() => {
+                        const btns = document.querySelectorAll('button');
+                        return Array.from(btns)
+                            .filter(b => !(b.innerText||b.textContent||'').trim() && !b.title && !b.getAttribute('aria-label'))
+                            .map((b, i) => i);
+                    }""")
+                    print(f'[zoho] anonymous icon btns: {len(icon_btns or [])}')
+                    for idx in (icon_btns or []):
+                        try:
+                            with pg.expect_download(timeout=3000) as dl_chk:
+                                pg.evaluate(f"""() => {{
+                                    const btns = Array.from(document.querySelectorAll('button'))
+                                        .filter(b => !(b.innerText||b.textContent||'').trim() && !b.title && !b.getAttribute('aria-label'));
+                                    if (btns[{idx}]) btns[{idx}].click();
+                                }}""")
+                            return dl_chk.value
+                        except PWTimeout:
+                            continue
+                    return None
+
+                try:
+                    with page.expect_download(timeout=40000) as dl_info:
+                        clicked = _click_export(page)
+                        if not clicked:
+                            print(f'[zoho] _click_export failed, trying icon buttons')
+                            # Try anonymous icon buttons inside expect_download context
+                            anon_btns_count = page.evaluate("""() => document.querySelectorAll('button').length""")
+                            for idx in range(min(anon_btns_count, 30)):
+                                try:
+                                    page.evaluate(f"""() => {{ const btns = document.querySelectorAll('button'); if(btns[{idx}]) btns[{idx}].click(); }}""")
+                                    page.wait_for_timeout(300)
+                                except Exception:
+                                    pass
                     dl = dl_info.value
                     excel_path = os.path.join(download_dir, dl.suggested_filename or f'gstr2b_{month_period}.xlsx')
                     dl.save_as(excel_path)
                     print(f'[zoho] downloaded: {excel_path}')
-                    break  # Got a file — use it (run_reconciliation handles multi-state)
+                    break
                 except PWTimeout:
                     print(f'[zoho] download timeout for {month_period}, trying next month')
                     continue
