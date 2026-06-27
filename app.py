@@ -628,45 +628,120 @@ def zoho_browser_fetch():
             )
             print(f'[zoho] navigating to recon_url')
             page.goto(recon_url, timeout=60000)
-            page.wait_for_timeout(5000)
+            page.wait_for_timeout(8000)
             print(f'[zoho] recon page loaded, url={page.url[:80]}')
 
+            # Debug: log all buttons/links on page to diagnose export UI
+            try:
+                btns = page.evaluate("""() => {
+                    const els = document.querySelectorAll('button,a,[role="button"],[class*="export"],[class*="Export"],[title*="xport"],[aria-label*="xport"]');
+                    return Array.from(els).slice(0,40).map(e => ({
+                        tag: e.tagName, text: (e.innerText||e.textContent||'').trim().slice(0,60),
+                        cls: e.className.slice(0,80), title: e.title||'', aria: e.getAttribute('aria-label')||''
+                    }));
+                }""")
+                for b in (btns or []):
+                    print(f'[zoho] btn: tag={b["tag"]} text="{b["text"]}" cls="{b["cls"][:40]}" title="{b["title"]}" aria="{b["aria"]}"')
+            except Exception as dbg_e:
+                print(f'[zoho] debug eval failed: {dbg_e}')
+
+            # Take screenshot for debugging
+            import base64 as _b64
+            try:
+                _ss_path = os.path.join(download_dir, 'recon_page.png')
+                page.screenshot(path=_ss_path, full_page=False)
+                with open(_ss_path, 'rb') as _f:
+                    _ss_b64 = _b64.b64encode(_f.read()).decode()
+                print(f'[zoho] screenshot taken, size={len(_ss_b64)} chars b64')
+            except Exception as _sse:
+                _ss_b64 = ''
+                print(f'[zoho] screenshot failed: {_sse}')
+
             # --- Export as Excel ---
-            # Must set up download listener BEFORE clicking export button
-            with page.expect_download(timeout=90000) as dl_info:
-                export_clicked = False
-                export_selectors = [
-                    'button:has-text("Export")',
-                    '[aria-label*="Export"]',
-                    'button:has-text("Download")',
-                    '[title*="Export"]',
-                    '.export-btn',
-                    'a:has-text("Export")',
-                ]
-                for sel in export_selectors:
+            # Step 1: Click Export button to open dropdown (BEFORE setting up download listener)
+            export_btn_found = None
+            # Try JS click first (more reliable for SPAs)
+            export_btn_found = page.evaluate("""() => {
+                const texts = ['export', 'download'];
+                const all = document.querySelectorAll('button,a,[role="button"],[class*="export"],[title*="xport"],[aria-label*="xport"]');
+                for (const el of all) {
+                    const t = (el.innerText||el.textContent||el.title||el.getAttribute('aria-label')||'').toLowerCase().trim();
+                    if (texts.some(x => t === x || t.startsWith(x))) {
+                        el.click();
+                        return (el.innerText||el.className||'found').slice(0,40);
+                    }
+                }
+                return null;
+            }""")
+            print(f'[zoho] JS export click: {export_btn_found}')
+
+            if not export_btn_found:
+                for sel in ['button:has-text("Export")', '[aria-label*="Export"]',
+                            'button:has-text("Download")', '[title*="Export"]',
+                            '.export-btn', 'a:has-text("Export")', '[class*="export"]']:
                     try:
-                        page.click(sel, timeout=3000)
-                        export_clicked = True
+                        page.click(sel, timeout=2000)
+                        export_btn_found = sel
+                        print(f'[zoho] CSS export clicked: {sel}')
                         break
                     except PWTimeout:
                         continue
 
-                # Try clicking Excel option in dropdown (after export button opens it)
-                if export_clicked:
-                    for sel in ['text=Excel', 'li:has-text("Excel")', '[data-value="xlsx"]', 'button:has-text("Excel")']:
+            # Wait for dropdown to appear
+            page.wait_for_timeout(1200)
+
+            # Log what's visible in dropdown now
+            try:
+                dropdown_items = page.evaluate("""() => {
+                    const all = document.querySelectorAll('li,a,[role="menuitem"],[role="option"],[class*="dropdown"] *');
+                    return Array.from(all).slice(0,20).map(e => (e.innerText||e.textContent||'').trim().slice(0,50)).filter(Boolean);
+                }""")
+                print(f'[zoho] dropdown items: {dropdown_items}')
+            except Exception:
+                pass
+
+            # Step 2: Set up download listener THEN click Excel (download is triggered by Excel click)
+            print(f'[zoho] setting up download listener and clicking Excel...')
+            with page.expect_download(timeout=90000) as dl_info:
+                excel_clicked = page.evaluate("""() => {
+                    const all = document.querySelectorAll('li,a,button,[role="menuitem"],[role="option"]');
+                    for (const el of all) {
+                        const t = (el.innerText||el.textContent||'').trim().toLowerCase();
+                        if (t === 'excel' || t === '.xlsx' || t.includes('excel')) {
+                            el.click();
+                            return (el.innerText||'excel-found').slice(0,40);
+                        }
+                    }
+                    return null;
+                }""")
+                print(f'[zoho] JS excel click: {excel_clicked}')
+
+                if not excel_clicked:
+                    for sel in ['text=Excel', 'li:has-text("Excel")', '[data-value="xlsx"]',
+                                'button:has-text("Excel")', 'a:has-text("Excel")', '.xlsx']:
                         try:
-                            page.click(sel, timeout=4000)
+                            page.click(sel, timeout=2000)
+                            print(f'[zoho] CSS excel clicked: {sel}')
+                            excel_clicked = sel
                             break
                         except PWTimeout:
                             continue
-                else:
-                    # Try direct Excel click as fallback
-                    for sel in ['text=Excel', 'li:has-text("Excel")', '[data-value="xlsx"]']:
-                        try:
-                            page.click(sel, timeout=3000)
-                            break
-                        except PWTimeout:
-                            continue
+
+                if not excel_clicked:
+                    # Last resort: try clicking Export again (might directly download)
+                    print('[zoho] no Excel option found, trying Export click again inside download context')
+                    export_btn_found2 = page.evaluate("""() => {
+                        const all = document.querySelectorAll('button,a,[role="button"]');
+                        for (const el of all) {
+                            const t = (el.innerText||el.textContent||'').toLowerCase().trim();
+                            if (t.includes('export') || t.includes('download')) {
+                                el.click();
+                                return (el.innerText||'found').slice(0,40);
+                            }
+                        }
+                        return null;
+                    }""")
+                    print(f'[zoho] retry export click: {export_btn_found2}')
 
             dl = dl_info.value
             import os as _os
