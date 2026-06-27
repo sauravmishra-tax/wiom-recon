@@ -613,11 +613,44 @@ def zoho_browser_fetch():
 
             if 'accounts.zoho' in page.url or 'login' in page.url.lower():
                 print('[zoho] login page detected, filling credentials')
+                # Log page title / visible error text for diagnosis
+                try:
+                    page_diag = page.evaluate("""() => ({
+                        title: document.title,
+                        h1: (document.querySelector('h1,h2,.signIn-form-title')||{}).innerText||'',
+                        err: (document.querySelector('.error-msg,.disp-err,.alert,.za-error-msg')||{}).innerText||''
+                    })""")
+                    print(f'[zoho] login page diag: {page_diag}')
+                except Exception:
+                    pass
                 page.fill('#login_id', zoho_email, timeout=10000)
                 page.click('#nextbtn', timeout=5000)
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(2000)
+                # Log what appeared after email submit
+                try:
+                    after_email_diag = page.evaluate("""() => ({
+                        url: location.href.slice(0,80),
+                        title: document.title,
+                        err: (document.querySelector('.error-msg,.disp-err,.alert,.za-error-msg')||{}).innerText||'',
+                        has_pwd: !!document.querySelector('#password')
+                    })""")
+                    print(f'[zoho] after email submit: {after_email_diag}')
+                except Exception:
+                    pass
                 page.fill('#password', zoho_password, timeout=8000)
                 page.click('#nextbtn', timeout=5000)
+                page.wait_for_timeout(3000)
+                # Log what appeared after password submit
+                try:
+                    after_pwd_diag = page.evaluate("""() => ({
+                        url: location.href.slice(0,80),
+                        title: document.title,
+                        err: (document.querySelector('.error-msg,.disp-err,.alert,.za-error-msg,.error')||{}).innerText||'',
+                        body_text: document.body.innerText.slice(0,300)
+                    })""")
+                    print(f'[zoho] after pwd submit: {after_pwd_diag}')
+                except Exception:
+                    pass
                 print('[zoho] waiting for post-login redirect...')
                 # Wait up to 60s for any Zoho page (org ID or intermediate auth pages)
                 try:
