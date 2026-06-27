@@ -731,29 +731,55 @@ def zoho_browser_fetch():
                         continue
                 return False
 
+            # --- Navigate via SPA router (not direct page.goto with hash) ---
+            # First land on the GST filings page via proper navigation so SPA sets up state
+            gst_filings_url = f'https://books.zoho.in/app/{zoho_org_id}#/gstfiling/tax/filings'
+            print(f'[zoho] navigating to GST filings: {gst_filings_url[:80]}')
+            page.goto(gst_filings_url, timeout=60000)
+            page.wait_for_timeout(6000)
+            print(f'[zoho] GST filings url: {page.url[:80]}')
+
+            # Log all links/buttons on GST filings page to find reconciliation entry
+            try:
+                filing_links = page.evaluate("""() => {
+                    const els = document.querySelectorAll('a,button,[role="button"]');
+                    return Array.from(els).slice(0,60).map(e => ({
+                        tag: e.tagName,
+                        text: (e.innerText||e.textContent||'').trim().slice(0,60),
+                        href: e.href||'',
+                        cls: (e.className||'').slice(0,50)
+                    })).filter(e => e.text || e.href);
+                }""")
+                for fl in (filing_links or []):
+                    print(f'[zoho] FILING_LINK: tag={fl["tag"]} text="{fl["text"]}" href="{fl["href"][:60]}" cls="{fl["cls"][:30]}"')
+            except Exception as fle:
+                print(f'[zoho] filing links eval failed: {fle}')
+
             # Export month by month; use first successful file
             for month_period in months:
                 mm, yy = month_period[5:], month_period[:4]
                 single_from = f'{mm}-{yy}'   # MM-YYYY
                 single_to   = f'{mm}-{yy}'
-                recon_url = (
-                    f'https://books.zoho.in/app/{zoho_org_id}'
+
+                # Use SPA hash change (not full page.goto) to navigate within the app
+                recon_hash = (
                     f'#/gstfiling/tax/filings/reconciliation'
                     f'?from_date={single_from}&to_date={single_to}'
                     f'&tax_return_type=in_gstr2b_return'
                 )
-                print(f'[zoho] navigating to recon for {month_period}: {recon_url[:80]}')
-                page.goto(recon_url, timeout=60000)
-                page.wait_for_timeout(5000)
+                print(f'[zoho] changing hash for {month_period}: {recon_hash}')
+                page.evaluate(f"location.hash = '{recon_hash[1:]}'")  # remove leading #
+                page.wait_for_timeout(8000)  # wait for SPA to route and load data
 
-                # Wait for reconciliation content to render (any button inside list-header)
-                try:
-                    page.wait_for_selector('.btn-toolbar button, .list-header button', timeout=20000)
-                    print(f'[zoho] toolbar ready for {month_period}')
-                except PWTimeout:
-                    print(f'[zoho] toolbar timeout for {month_period}, trying anyway')
+                # Also try a full goto as fallback if hash change didn't work
+                cur_url = page.url
+                print(f'[zoho] url after hash change: {cur_url[:80]}')
+                if 'reconciliation' not in cur_url:
+                    recon_url = f'https://books.zoho.in/app/{zoho_org_id}{recon_hash}'
+                    print(f'[zoho] fallback goto: {recon_url[:80]}')
+                    page.goto(recon_url, timeout=60000)
+                    page.wait_for_timeout(8000)
 
-                page.wait_for_timeout(2000)
                 print(f'[zoho] url after nav: {page.url[:80]}')
 
                 # Log API calls made so far
