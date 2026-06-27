@@ -104,7 +104,7 @@ def run_agent(from_period: str, to_period: str, states: list, headless: bool = F
 
         # -- STEP 1: Login to Zoho ------------------------------
         print("[ 1/5 ] Logging into Zoho Books...")
-        page.goto(f'{ZOHO_BOOKS_URL}/app/{ZOHO_ORG_ID}', timeout=30000)
+        page.goto(f'{ZOHO_BOOKS_URL}/app/{ZOHO_ORG_ID}', timeout=60000)
         time.sleep(2)
 
         # Handle Zoho login page (may redirect to accounts.zoho.in)
@@ -116,7 +116,7 @@ def run_agent(from_period: str, to_period: str, states: list, headless: bool = F
                 page.fill('#password', ZOHO_PASSWORD, timeout=8000)
                 page.click('#nextbtn', timeout=5000)
                 print("       Waiting for login...")
-                page.wait_for_url(f'**/app/{ZOHO_ORG_ID}**', timeout=30000)
+                page.wait_for_url(f'**/app/{ZOHO_ORG_ID}**', timeout=60000)
             except PWTimeout:
                 # Try alternative selectors
                 try:
@@ -125,7 +125,7 @@ def run_agent(from_period: str, to_period: str, states: list, headless: bool = F
                     time.sleep(1)
                     page.fill('input[name="PASSWORD"]', ZOHO_PASSWORD, timeout=5000)
                     page.press('input[name="PASSWORD"]', 'Enter')
-                    page.wait_for_url(f'**{ZOHO_ORG_ID}**', timeout=30000)
+                    page.wait_for_url(f'**{ZOHO_ORG_ID}**', timeout=60000)
                 except Exception as e:
                     print(f"       Login issue -- browser is open, please log in manually.")
                     input("       Press Enter once you're logged into Zoho Books...")
@@ -140,7 +140,7 @@ def run_agent(from_period: str, to_period: str, states: list, headless: bool = F
             from_date=fmt_zoho_date(from_period),
             to_date=fmt_zoho_date(to_period),
         )
-        page.goto(recon_url, timeout=30000)
+        page.goto(recon_url, timeout=60000)
         time.sleep(3)
 
         # Wait for the reconciliation table to load
