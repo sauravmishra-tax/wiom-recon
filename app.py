@@ -666,60 +666,33 @@ def zoho_browser_fetch():
             page.wait_for_timeout(10000)
             print(f'[zoho] recon page loaded, url={page.url[:80]}')
 
-            # Debug: log ALL export/download related elements (no slice limit)
+            # Debug: dump ALL buttons with their title/aria/text to find export button
             try:
-                btns = page.evaluate("""() => {
-                    const all = document.querySelectorAll('[class*="export"],[class*="Export"],[title*="xport"],[aria-label*="xport"],button,a,[role="button"]');
-                    const res = [];
-                    for (const e of all) {
-                        const t = (e.innerText||e.textContent||'').trim();
-                        const title = e.title||'';
-                        const aria = e.getAttribute('aria-label')||'';
-                        const cls = e.className||'';
-                        if (cls.toLowerCase().includes('export') || title.toLowerCase().includes('export') ||
-                            aria.toLowerCase().includes('export') || t.toLowerCase() === 'export' ||
-                            t.toLowerCase() === 'download') {
-                            res.push({tag:e.tagName, text:t.slice(0,60), cls:cls.slice(0,80), title, aria});
-                        }
-                    }
-                    // Also log last 10 buttons for context
-                    const allBtns = Array.from(document.querySelectorAll('button'));
-                    for (const e of allBtns.slice(-10)) {
-                        res.push({tag:'BTN-LAST', text:(e.innerText||'').trim().slice(0,60), cls:(e.className||'').slice(0,60), title:e.title||'', aria:''});
-                    }
-                    return res;
+                all_btns = page.evaluate("""() => {
+                    const all = document.querySelectorAll('button,[role="button"]');
+                    return Array.from(all).map(e => ({
+                        text: (e.innerText||e.textContent||'').trim().slice(0,50),
+                        title: (e.title||'').slice(0,50),
+                        aria: (e.getAttribute('aria-label')||'').slice(0,50),
+                        cls: (e.className||'').slice(0,60)
+                    })).filter(b => b.text||b.title||b.aria);
                 }""")
-                for b in (btns or []):
-                    print(f'[zoho] btn: tag={b["tag"]} text="{b["text"]}" cls="{b["cls"][:40]}" title="{b["title"]}" aria="{b["aria"]}"')
+                for b in (all_btns or []):
+                    print(f'[zoho] BTN text="{b["text"]}" title="{b["title"]}" aria="{b["aria"]}" cls="{b["cls"][:35]}"')
             except Exception as dbg_e:
                 print(f'[zoho] debug eval failed: {dbg_e}')
 
-            # Take screenshot for debugging
-            try:
-                _ss_path = os.path.join(download_dir, 'recon_page.png')
-                page.screenshot(path=_ss_path, full_page=False)
-                print(f'[zoho] screenshot saved: {_ss_path}')
-            except Exception as _sse:
-                print(f'[zoho] screenshot failed: {_sse}')
-
             # --- Export as Excel ---
-            # Step 1: Click Export button to open dropdown (BEFORE setting up download listener)
-            export_btn_found = None
+            # Case-insensitive JS search across text/title/aria-label for export/download button
             export_btn_found = page.evaluate("""() => {
-                const all = document.querySelectorAll('button,a,[role="button"],[class*="export"],[title*="xport"],[aria-label*="xport"]');
+                const all = document.querySelectorAll('button,a,[role="button"]');
                 for (const el of all) {
-                    const t = (el.innerText||el.textContent||el.title||el.getAttribute('aria-label')||'').toLowerCase().trim();
-                    if (t === 'export' || t === 'download' || t.startsWith('export ') || t.startsWith('download ')) {
-                        el.click();
-                        return (el.innerText||el.title||el.className||'found').slice(0,40);
-                    }
-                }
-                // Try partial match if exact fails
-                for (const el of all) {
-                    const t = (el.innerText||el.textContent||el.title||el.getAttribute('aria-label')||'').toLowerCase().trim();
+                    const t = ((el.innerText||el.textContent||'').trim() + ' ' +
+                               (el.title||'') + ' ' +
+                               (el.getAttribute('aria-label')||'')).toLowerCase();
                     if (t.includes('export') || t.includes('download')) {
                         el.click();
-                        return ('partial:' + (el.innerText||el.title||el.className||'found')).slice(0,60);
+                        return (el.innerText||el.title||el.getAttribute('aria-label')||el.className||'found').slice(0,60);
                     }
                 }
                 return null;
@@ -727,8 +700,9 @@ def zoho_browser_fetch():
             print(f'[zoho] JS export click: {export_btn_found}')
 
             if not export_btn_found:
-                for sel in ['button:has-text("Export")', '[aria-label*="Export"]',
-                            'button:has-text("Download")', '[title*="Export"]',
+                for sel in ['button:has-text("Export")', '[aria-label="Export"]',
+                            '[title="Export"]', '[title*="Export"]',
+                            'button:has-text("Download")', '[title*="Download"]',
                             '.export-btn', 'a:has-text("Export")', '[class*="export"]']:
                     try:
                         page.click(sel, timeout=2000)
