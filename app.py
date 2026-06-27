@@ -704,6 +704,13 @@ def zoho_browser_fetch():
                     };
                 }""")
                 print(f'[zoho] CONTENT: rowCount={content_info["rowCount"]} rows={content_info["rows"]} mainCls={content_info["mainCls"]}')
+                # Log HTML of first 3 rows to see structure
+                row_htmls = page.evaluate("""() => {
+                    const rows = document.querySelectorAll('table tr, .list-item, [class*="row"]');
+                    return Array.from(rows).slice(0,3).map(r => r.outerHTML.slice(0,300));
+                }""")
+                for i, rh in enumerate(row_htmls or []):
+                    print(f'[zoho] ROW{i}: {rh}')
             except Exception as dbg_e:
                 print(f'[zoho] content eval failed: {dbg_e}')
 
