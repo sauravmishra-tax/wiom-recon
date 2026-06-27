@@ -674,13 +674,23 @@ def zoho_browser_fetch():
                         text: (e.innerText||e.textContent||'').trim().slice(0,50),
                         title: (e.title||'').slice(0,50),
                         aria: (e.getAttribute('aria-label')||'').slice(0,50),
-                        cls: (e.className||'').slice(0,60)
-                    })).filter(b => b.text||b.title||b.aria);
+                        cls: (e.className||'').slice(0,60),
+                        html: e.outerHTML.slice(0,120)
+                    }));
                 }""")
                 for b in (all_btns or []):
-                    print(f'[zoho] BTN text="{b["text"]}" title="{b["title"]}" aria="{b["aria"]}" cls="{b["cls"][:35]}"')
+                    print(f'[zoho] BTN text="{b["text"]}" title="{b["title"]}" aria="{b["aria"]}" cls="{b["cls"][:35]}" html="{b["html"][:80]}"')
             except Exception as dbg_e:
                 print(f'[zoho] debug eval failed: {dbg_e}')
+            # Also log main content toolbar HTML
+            try:
+                toolbar_html = page.evaluate("""() => {
+                    const toolbar = document.querySelector('.page-header,.toolbar,.list-header,[class*="header"],[class*="toolbar"]');
+                    return toolbar ? toolbar.outerHTML.slice(0, 2000) : 'no toolbar found';
+                }""")
+                print(f'[zoho] TOOLBAR_HTML: {toolbar_html}')
+            except Exception as dbg_e:
+                print(f'[zoho] toolbar html eval failed: {dbg_e}')
 
             # --- Export as Excel ---
             # Case-insensitive JS search across text/title/aria-label for export/download button
