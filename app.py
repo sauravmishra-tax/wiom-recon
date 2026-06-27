@@ -662,8 +662,15 @@ def zoho_browser_fetch():
             )
             print(f'[zoho] navigating to recon_url')
             page.goto(recon_url, timeout=60000)
-            # Wait longer for SPA reconciliation content to render
-            page.wait_for_timeout(10000)
+            page.wait_for_timeout(5000)
+            # Wait for reconciliation toolbar to have actual buttons (not just empty Ember comments)
+            # The btn-toolbar btn-group needs at least one real button to appear
+            try:
+                page.wait_for_selector('.btn-toolbar button, .list-header button, .page-header button', timeout=25000)
+                print('[zoho] toolbar buttons appeared')
+            except PWTimeout:
+                print('[zoho] toolbar buttons wait timed out, continuing anyway')
+            page.wait_for_timeout(2000)
             print(f'[zoho] recon page loaded, url={page.url[:80]}')
 
             # Debug: dump ALL buttons with their title/aria/text to find export button
