@@ -611,13 +611,47 @@ def zoho_browser_fetch():
                 page.fill('#password', zoho_password, timeout=8000)
                 page.click('#nextbtn', timeout=5000)
                 print('[zoho] waiting for post-login redirect...')
-                page.wait_for_url(f'**{zoho_org_id}**', timeout=60000)
+                # Wait up to 60s for any Zoho page (org ID or intermediate auth pages)
+                try:
+                    page.wait_for_url(f'**{zoho_org_id}**', timeout=30000)
+                except PWTimeout:
+                    # Might be on trust-device or other intermediate page
+                    print(f'[zoho] wait_for_url timeout, current url={page.url[:80]}')
                 print(f'[zoho] post-login url={page.url[:80]}')
 
-            # Skip Zoho announcement/notice pages (timezone-update etc.)
-            if 'announcement' in page.url or ('accounts.zoho' in page.url and zoho_org_id not in page.url):
-                print(f'[zoho] announcement page detected, skipping: {page.url[:80]}')
-                page.wait_for_timeout(1000)
+            # Handle intermediate Zoho auth pages: trust-device, announcements, etc.
+            for _attempt in range(6):
+                cur = page.url
+                print(f'[zoho] inter-page check attempt={_attempt} url={cur[:80]}')
+                if 'books.zoho.in/app' in cur and zoho_org_id in cur:
+                    print('[zoho] reached app, done with auth pages')
+                    break
+                # "Trust this device?" — click "Not now"
+                try:
+                    page.click('.notnowbtn, button:has-text("Not now")', timeout=2000)
+                    print('[zoho] clicked Not now (trust device)')
+                    page.wait_for_timeout(2000)
+                    continue
+                except PWTimeout:
+                    pass
+                # "Trust" button — click it to proceed
+                try:
+                    page.click('.trustbtn, button:has-text("Trust")', timeout=1500)
+                    print('[zoho] clicked Trust')
+                    page.wait_for_timeout(2000)
+                    continue
+                except PWTimeout:
+                    pass
+                # Announcement/notice page — navigate directly
+                if 'announcement' in cur or ('accounts.zoho' in cur and zoho_org_id not in cur):
+                    print(f'[zoho] announcement/redirect page, navigating directly')
+                    page.wait_for_timeout(1000)
+                    break
+                # Any other accounts.zoho page — wait and retry
+                if 'accounts.zoho' in cur:
+                    page.wait_for_timeout(3000)
+                    continue
+                break
 
             # --- Navigate to GSTR-2B Reconciliation ---
             recon_url = (
