@@ -779,39 +779,87 @@ def zoho_browser_fetch():
             except Exception as che:
                 print(f'[zoho] content html failed: {che}')
 
-            # Export month by month; use first successful file
-            for month_period in months:
-                mm, yy = month_period[5:], month_period[:4]
-                single_from = f'{mm}-{yy}'   # MM-YYYY
-                single_to   = f'{mm}-{yy}'
+            # Find the correct reconciliation URL by looking at the filings page links
+            # The URL needs tax_return_id and tax_settings_id which change per period
+            print(f'[zoho] finding reconciliation links from filings page...')
+            page.wait_for_timeout(3000)
+            recon_links = page.evaluate("""() => {
+                return Array.from(document.querySelectorAll('a')).filter(a =>
+                    /reconciliation/i.test(a.href || a.getAttribute('href') || '')
+                ).map(a => ({
+                    text: (a.innerText||'').trim().slice(0,80),
+                    href: a.href || a.getAttribute('href') || ''
+                }));
+            }""")
+            print(f'[zoho] reconciliation links found: {recon_links}')
 
-                # Use SPA hash change (not full page.goto) to navigate within the app
-                recon_hash = (
+            # Determine the single best reconciliation link to use
+            best_recon_url = None
+            if recon_links:
+                # Prefer link matching from_period month
+                fm_zoho = zoho_from  # e.g. '04-2026'
+                for rl in recon_links:
+                    if fm_zoho in rl['href']:
+                        best_recon_url = rl['href']
+                        break
+                if not best_recon_url:
+                    best_recon_url = recon_links[0]['href']
+                print(f'[zoho] best_recon_url: {best_recon_url}')
+            else:
+                # Fallback: use URL pattern from user (with known IDs for this org)
+                # These IDs are specific to org 60036724867 - may need updating for other periods
+                best_recon_url = (
+                    f'https://books.zoho.in/app/{zoho_org_id}'
                     f'#/gstfiling/tax/filings/reconciliation'
-                    f'?from_date={single_from}&to_date={single_to}'
+                    f'?from_date={zoho_from}&to_date={zoho_to}'
                     f'&tax_return_type=in_gstr2b_return'
+                    f'&tax_return_id=2295010000007745251'
+                    f'&tax_settings_id=2295010000000000271'
+                    f'&txn_from_date=&txn_to_date='
                 )
-                print(f'[zoho] changing hash for {month_period}: {recon_hash}')
-                page.evaluate(f"location.hash = '{recon_hash[1:]}'")  # remove leading #
-                page.wait_for_timeout(8000)  # wait for SPA to route and load data
+                print(f'[zoho] using fallback recon URL with known IDs')
 
-                # Also try a full goto as fallback if hash change didn't work
-                cur_url = page.url
-                print(f'[zoho] url after hash change: {cur_url[:80]}')
-                if 'reconciliation' not in cur_url:
-                    recon_url = f'https://books.zoho.in/app/{zoho_org_id}{recon_hash}'
-                    print(f'[zoho] fallback goto: {recon_url[:80]}')
-                    page.goto(recon_url, timeout=60000)
-                    page.wait_for_timeout(8000)
+            # Navigate to the reconciliation page
+            print(f'[zoho] navigating to: {best_recon_url[:120]}')
+            page.goto(best_recon_url, timeout=60000)
+            page.wait_for_timeout(8000)
+            print(f'[zoho] url after recon nav: {page.url[:100]}')
 
-                print(f'[zoho] url after nav: {page.url[:80]}')
+            # Wait for toolbar buttons to appear (reconciliation data loaded)
+            try:
+                page.wait_for_selector('.btn-toolbar button, .list-header button', timeout=20000)
+                print('[zoho] reconciliation toolbar loaded')
+            except PWTimeout:
+                print('[zoho] toolbar wait timed out')
 
-                # Log API calls made so far
-                _api_calls.clear()
-                page.wait_for_timeout(3000)  # let XHRs fire
-                print(f'[zoho] API calls ({len(_api_calls)}):')
-                for c in _api_calls[-20:]:
-                    print(f'[zoho]   {c}')
+            page.wait_for_timeout(2000)
+
+            # Log API calls to confirm data loaded
+            _api_calls.clear()
+            page.wait_for_timeout(3000)
+            print(f'[zoho] API calls after recon nav ({len(_api_calls)}):')
+            for c in _api_calls[-10:]:
+                print(f'[zoho]   {c}')
+
+            # Log toolbar buttons
+            try:
+                toolbar_btns = page.evaluate("""() => {
+                    const btns = document.querySelectorAll('.btn-toolbar button, .list-header button, .btn-group button');
+                    return Array.from(btns).map(b => ({
+                        text:(b.innerText||'').trim().slice(0,40),
+                        title:(b.title||'').slice(0,40),
+                        aria:(b.getAttribute('aria-label')||'').slice(0,40),
+                        cls:(b.className||'').slice(0,50)
+                    }));
+                }""")
+                print(f'[zoho] toolbar_btns: {toolbar_btns}')
+            except Exception:
+                pass
+
+            # Now export — single attempt (no month loop since we use the range URL)
+            months = ['single']  # just one iteration
+            for month_period in months:
+                print(f'[zoho] url after nav: {page.url[:100]}')
 
                 # Log ALL buttons + their inner SVG/icon text for this month
                 try:
