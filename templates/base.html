@@ -81,6 +81,11 @@
         .theme-btn:hover{background:rgba(255,255,255,.24);transform:translateY(-1px);}
         .user-chip{display:flex;align-items:center;gap:10px;font-size:12px;color:#d7cfe0;
             padding-left:14px;margin-left:8px;border-left:1px solid rgba(255,255,255,.16);}
+        .u-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+            font-size:12px;font-weight:800;color:#fff;flex-shrink:0;letter-spacing:.01em;background:var(--grad);
+            box-shadow:0 2px 8px rgba(224,17,157,.35);}
+        @media(max-width:900px){nav a.navlink{padding:7px 9px;font-size:12px;}.wrap{padding:16px 14px 40px;}}
+        @media(max-width:600px){.logo p{display:none;}.logo h1{font-size:15px;}}
         .user-chip b{color:#fff;font-weight:700;}
         .badge{font-size:8.5px;padding:2px 8px;border-radius:20px;font-weight:800;text-transform:uppercase;
             letter-spacing:.05em;color:#fff;display:inline-block;}
@@ -201,6 +206,7 @@
             {% endif %}
             <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle light / dark" aria-label="Toggle theme"></button>
             <div class="user-chip">
+                <div class="u-avatar" id="userAvatar" title="{{ current_user.name }}"></div>
                 <span><b>{{ current_user.name }}</b>{% if current_user.title %}<br><span style="font-size:10px;color:#c9b6d6;">{{ current_user.title }}</span>{% endif %}<br><span class="badge {{ current_user.role }}">{{ current_user.role_display }}</span></span>
                 <a href="{{ url_for('auth.change_password') }}" style="margin-left:6px;color:#d7cfe0;font-weight:700;" title="Change password">🔑</a>
                 <a href="{{ url_for('auth.logout') }}" style="margin-left:4px;color:#ffb3e6;font-weight:700;">Logout</a>
@@ -221,6 +227,12 @@
             h.setAttribute('data-theme',n);try{localStorage.setItem('wiom-theme',n);}catch(e){}updateThemeIcon();}
         function updateThemeIcon(){var b=document.getElementById('themeBtn');if(b)b.innerHTML=document.documentElement.getAttribute('data-theme')==='light'?_MOON:_SUN;}
         updateThemeIcon();
+        // User avatar initials + colour
+        (function(){var n='{{ current_user.name|e if current_user.is_authenticated else "" }}';if(!n)return;
+            var p=n.trim().split(/\s+/);var ini=(p[0][0]+(p.length>1?p[p.length-1][0]:'')).toUpperCase();
+            var pal=['#7C5CFF','#E0119D','#16C784','#3B9BFF','#FF8C42','#D46CFF'];
+            var bg=pal[n.split('').reduce(function(a,c){return a+c.charCodeAt(0);},0)%pal.length];
+            var el=document.getElementById('userAvatar');if(el){el.style.background=bg;el.textContent=ini;}})();
     </script>
     {% block scripts %}{% endblock %}
 </body>

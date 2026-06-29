@@ -296,11 +296,21 @@
 </div>
 
 <div class="stat-grid" style="margin-bottom:16px;grid-template-columns:repeat(5,1fr);">
-    <div class="kpi" style="border-color:var(--red);"><div class="ic">⚠️</div><div class="n tnum red" style="color:var(--red);font-size:24px;">₹<span id="itcRisk">{{ '{:,}'.format(stats.itc_risk) }}</span></div><div class="l">ITC at risk (Books≠2B)</div></div>
-    <div class="kpi"><div class="ic">📊</div><div class="n tnum">{{ stats.total }}</div><div class="l">Total invoice rows</div></div>
-    <div class="kpi"><div class="ic">📥</div><div class="n tnum" style="color:var(--gray-light)">{{ stats.open }}</div><div class="l">Open · awaiting remark</div></div>
-    <div class="kpi"><div class="ic">💬</div><div class="n tnum" style="color:var(--blue)">{{ stats.remarked }}</div><div class="l">Remarked by team</div></div>
-    <div class="kpi"><div class="ic">✅</div><div class="n tnum" style="color:var(--green)">{{ stats.done }}</div><div class="l">Approved / resolved</div></div>
+    <a href="{{ url_for('detail') }}?tab=books" style="text-decoration:none;">
+    <div class="kpi" style="border-color:var(--red);cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">⚠️</div><div class="n tnum red" style="color:var(--red);font-size:24px;">₹<span id="itcRisk">{{ '{:,}'.format(stats.itc_risk) }}</span></div><div class="l">ITC at risk (Books≠2B)</div><div style="font-size:10px;color:var(--pink);margin-top:4px;">Click → Books Only tab</div></div>
+    </a>
+    <a href="{{ url_for('detail') }}" style="text-decoration:none;">
+    <div class="kpi" style="cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">📊</div><div class="n tnum">{{ stats.total }}</div><div class="l">Total invoice rows</div></div>
+    </a>
+    <a href="{{ url_for('detail') }}?status=open" style="text-decoration:none;">
+    <div class="kpi" style="cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">📥</div><div class="n tnum" style="color:var(--gray-light)">{{ stats.open }}</div><div class="l">Open · awaiting remark</div></div>
+    </a>
+    <a href="{{ url_for('detail') }}?status=remarked" style="text-decoration:none;">
+    <div class="kpi" style="cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">💬</div><div class="n tnum" style="color:var(--blue)">{{ stats.remarked }}</div><div class="l">Remarked by team</div></div>
+    </a>
+    <a href="{{ url_for('detail') }}?status=approved" style="text-decoration:none;">
+    <div class="kpi" style="cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">✅</div><div class="n tnum" style="color:var(--green)">{{ stats.done }}</div><div class="l">Approved / resolved</div></div>
+    </a>
 </div>
 
 <!-- Approval Reminder Banner -->
@@ -323,6 +333,15 @@
     <a href="{{ url_for('detail') }}?my=1" class="btn sm ghost">View all →</a>
   </div>
   <div id="myWorkBody"><span style="color:var(--gray)">Loading…</span></div>
+</div>
+
+<!-- Activity Feed -->
+<div class="card" style="margin-bottom:16px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <h2 style="margin:0;">⚡ Live Activity <span class="muted" style="font-weight:400;">— recent team actions</span></h2>
+    <button class="btn sm ghost" onclick="loadActivity()">↻ Refresh</button>
+  </div>
+  <div id="activityFeed"><span style="color:var(--gray)">Loading…</span></div>
 </div>
 
 <div class="card">
@@ -702,6 +721,25 @@ fetch('/api/approval-reminders').then(r=>r.json()).then(d=>{
         document.getElementById('reminderBanner').style.display='block';
     }
 });
+
+// Activity Feed
+function loadActivity(){
+    fetch('/api/activity').then(r=>r.json()).then(items=>{
+        const el=document.getElementById('activityFeed');
+        if(!items.length){el.innerHTML='<span style="color:var(--gray)">No activity yet.</span>';return;}
+        const ac={'remark':'var(--blue)','approve':'var(--green)','resolve':'var(--green)','reopen':'var(--orange)','reject':'var(--red)','upload':'var(--pink)'};
+        const ic={'remark':'💬','approve':'✓','resolve':'✓✓','reopen':'↺','reject':'✗','upload':'📤'};
+        el.innerHTML='<div style="display:flex;flex-direction:column;gap:5px;">'+
+        items.slice(0,12).map(i=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--dark2);border-radius:10px;font-size:12.5px;">
+            <span style="color:${ac[i.action]||'var(--gray-light)'};font-weight:800;min-width:64px;font-size:11px;">${ic[i.action]||'·'} ${i.action||'—'}</span>
+            <span style="font-weight:700;min-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.user}</span>
+            ${i.gstin?`<a href="/vendor/${i.gstin}" style="font-family:monospace;font-size:11px;color:var(--blue);min-width:130px;">${i.gstin}</a>`:'<span style="min-width:130px;"></span>'}
+            <span style="color:var(--gray-light);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;">${i.detail?i.detail.substring(0,70):''}</span>
+            <span style="color:var(--gray);font-size:11px;white-space:nowrap;margin-left:auto;">${i.at}</span>
+        </div>`).join('')+'</div>';
+    }).catch(()=>{document.getElementById('activityFeed').innerHTML='<span style="color:var(--gray)">Activity unavailable.</span>';});
+}
+loadActivity();
 
 // State-wise ITC Trend Chart
 fetch('/api/trend/by-state?months=6').then(r=>r.json()).then(d=>{

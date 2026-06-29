@@ -19,9 +19,24 @@
         <div><label>Label (optional)</label>
             <input type="text" id="label" placeholder="e.g. note"></div>
     </div>
-    <div style="margin-top:16px;"><label>Recon Excel file (.xlsx)</label>
-        <input type="file" id="file" accept=".xlsx,.xls"></div>
+    <!-- Drag & Drop Zone -->
+    <div id="dropZone" style="margin-top:16px;border:2px dashed var(--dark3);border-radius:14px;padding:30px 20px;text-align:center;cursor:pointer;transition:.2s;position:relative;"
+        onclick="document.getElementById('file').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--pink)';this.style.background='rgba(224,17,157,.05)'"
+        ondragleave="this.style.borderColor='var(--dark3)';this.style.background=''"
+        ondrop="handleDrop(event)">
+        <div style="font-size:28px;margin-bottom:8px;">📂</div>
+        <div style="font-size:13px;color:var(--gray-light);">Drag &amp; drop your Excel here, or <span style="color:var(--pink);font-weight:700;">click to browse</span></div>
+        <div id="dropFileName" style="margin-top:10px;font-size:12.5px;color:var(--green);font-weight:600;"></div>
+        <input type="file" id="file" accept=".xlsx,.xls" style="display:none" onchange="showDropFile(this)">
+    </div>
     <button class="btn" id="goBtn" style="margin-top:18px;" onclick="startUpload()">🚀 Run Reconciliation</button>
+</div>
+
+<!-- Upload History -->
+<div class="card" style="margin-top:20px;">
+    <h2>🕓 Recent Uploads</h2>
+    <div id="historyBody"><span style="color:var(--gray)">Loading…</span></div>
 </div>
 
 <!-- ===== FETCH FROM ZOHO CARD ===== -->
@@ -153,6 +168,38 @@ function refresh(){
     });
 }
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+
+function handleDrop(e){
+    e.preventDefault();
+    const dz=document.getElementById('dropZone');
+    dz.style.borderColor='var(--dark3)';dz.style.background='';
+    const f=e.dataTransfer.files[0];
+    if(!f){return;}
+    const dt=new DataTransfer();dt.items.add(f);
+    document.getElementById('file').files=dt.files;
+    showDropFile(document.getElementById('file'));
+    dz.style.borderColor='var(--green)';dz.style.background='rgba(22,199,132,.04)';
+}
+function showDropFile(inp){
+    const f=inp.files[0];
+    if(f){
+        document.getElementById('dropFileName').textContent='✓ '+f.name+' ('+Math.round(f.size/1024)+'KB)';
+        document.getElementById('dropZone').style.borderColor='var(--green)';
+    }
+}
+
+// Upload History
+fetch('/api/recent-runs').then(r=>r.json()).then(runs=>{
+    const el=document.getElementById('historyBody');
+    if(!runs.length){el.innerHTML='<span style="color:var(--gray)">No uploads yet.</span>';return;}
+    el.innerHTML='<div style="overflow-x:auto;"><table><thead><tr><th>Period</th><th>State</th><th>Label</th><th class="num">Rows</th><th>Uploaded by</th><th>When</th><th></th></tr></thead><tbody>'+
+    runs.map(r=>`<tr>
+        <td><b>${r.period}</b></td><td>${r.state||'—'}</td><td>${r.label||'—'}</td>
+        <td class="num">${(r.total_rows||0).toLocaleString()}</td>
+        <td>${r.uploaded_by}</td><td>${r.created_at}</td>
+        <td><a href="/detail?period=${encodeURIComponent(r.period)}&state=${encodeURIComponent(r.state)}" class="btn tiny ghost">Review →</a></td>
+    </tr>`).join('')+'</tbody></table></div>';
+}).catch(()=>{document.getElementById('historyBody').innerHTML='<span style="color:var(--gray)">Could not load history.</span>';});
 
 let _zProgressTimer = null;
 

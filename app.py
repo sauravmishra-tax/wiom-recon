@@ -2998,6 +2998,39 @@ def clear_recon_data():
     return jsonify({'ok': True, 'msg': 'All reconciliation data cleared. Users and settings intact.'})
 
 
+@app.route('/api/recent-runs')
+@login_required
+def api_recent_runs():
+    q = ReconRun.query
+    if not current_user.is_admin and current_user.state_list():
+        q = q.filter(ReconRun.state.in_(current_user.state_list()))
+    runs = q.order_by(ReconRun.created_at.desc()).limit(10).all()
+    return jsonify([{
+        'id': r.id, 'period': r.period or '', 'state': r.state or 'All',
+        'label': r.label or '', 'total_rows': r.total_rows or 0,
+        'uploaded_by': r.uploaded_by.name if r.uploaded_by else '—',
+        'created_at': r.created_at.strftime('%d-%b-%Y %H:%M') if r.created_at else ''
+    } for r in runs])
+
+
+@app.route('/api/activity')
+@login_required
+def api_activity():
+    logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(25).all()
+    result = []
+    for l in logs:
+        row = db.session.get(ReconRow, l.row_id) if l.row_id else None
+        result.append({
+            'user': l.user_name or '—',
+            'action': l.action or '',
+            'detail': l.new_value or l.field or '',
+            'gstin': row.gstin if row else '',
+            'vendor': row.vendor if row else '',
+            'at': l.created_at.strftime('%d-%b %H:%M') if l.created_at else ''
+        })
+    return jsonify(result)
+
+
 # ----------------------------------------------------------------------
 def _summary_stats(user):
     q = ReconRow.query
