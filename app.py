@@ -14,7 +14,7 @@ import time
 import threading
 import base64
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 
 from flask import (Flask, render_template, request, jsonify, send_file,
@@ -112,8 +112,32 @@ def _start_scheduler(app):
     import pytz
     ist = pytz.timezone('Asia/Kolkata')
     sched = BackgroundScheduler(daemon=True, timezone=ist)
+    def approval_reminder():
+        with app.app_context():
+            since = now_ist() - timedelta(days=3)
+            stale = ReconRow.query.filter(ReconRow.status == 'remarked',
+                                          ReconRow.remarked_at <= since).count()
+            if stale == 0:
+                return
+            last = get_setting('reminder_last_sent', '')
+            today = now_ist().strftime('%Y-%m-%d')
+            if last == today:
+                return
+            set_setting('reminder_last_sent', today)
+            db.session.commit()
+            admins = User.query.filter(User.role.in_(['admin', 'superadmin']), User.active == True).all()
+            for admin in admins:
+                try:
+                    from email_util import send_email
+                    send_email(admin.email, f'[WIOM Recon] {stale} rows pending approval (3+ days)',
+                               f'<p>{stale} remarked rows are waiting for approval for 3+ days.</p>'
+                               f'<p><a href="https://web-production-bf681c.up.railway.app/detail">Review now →</a></p>')
+                except Exception as e:
+                    print(f'  [reminder] email failed: {e}')
+
     sched.add_job(monthly_cfo, 'cron', hour=9, minute=0, id='monthly_cfo')
     sched.add_job(daily_slack, 'cron', hour=9, minute=30, id='daily_slack')
+    sched.add_job(approval_reminder, 'cron', hour=8, minute=30, id='approval_reminder')
 
     # Slack Bot daily jobs
     import slack_notify
@@ -2590,7 +2614,208 @@ def api_vendor_rows(gstin):
                     'rows': [r.to_dict() for r in rows], 'count': len(rows)})
 
 
-# ---- Feature 4: ITC-at-risk trend (month series) ----
+# ---- Feature: Vendor Drill Down page ----
+@app.route('/vendor/<gstin>')
+@login_required
+def vendor_detail_page(gstin):
+    return render_template('vendor_detail.html', gstin=gstin.strip(), states=WIOM_STATES)
+
+
+# ---- Feature: ITC trend by state ----
+@app.route('/api/trend/by-state')
+@login_required
+def api_trend_by_state():
+    months = int(request.args.get('months', 6))
+    q = db.session.query(ReconRow.period, ReconRow.state_name,
+                         func.sum(ReconRow.books_igst + ReconRow.books_cgst + ReconRow.books_sgst).label('itc'))
+    if not current_user.is_admin and current_user.state_list():
+        q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
+    q = q.filter(ReconRow.category == 'books_only').group_by(ReconRow.period, ReconRow.state_name)
+    all_periods = sorted(set(r.period for r in q.all()), reverse=True)[:months]
+    all_periods = sorted(all_periods)
+    agg = {}
+    for period, state, itc in q.all():
+        if period in all_periods:
+            agg.setdefault(state, {})[period] = round(itc or 0)
+    states = sorted(agg.keys())
+    return jsonify({'periods': all_periods, 'states': {s: [agg[s].get(p, 0) for p in all_periods] for s in states}})
+
+
+# ---- Feature: Dashboard state health (traffic light) ----
+@app.route('/api/dashboard-state-health')
+@login_required
+def api_dashboard_state_health():
+    from sqlalchemy import func
+    states = current_user.state_list() if not current_user.is_admin else WIOM_STATES
+    out = []
+    for state in states:
+        rows_q = ReconRow.query.filter(ReconRow.state_name == state)
+        total = rows_q.count()
+        open_n = rows_q.filter(ReconRow.status == 'open').count()
+        remarked = rows_q.filter(ReconRow.status == 'remarked').count()
+        approved = rows_q.filter(ReconRow.status.in_(['approved', 'resolved'])).count()
+        itc_risk = db.session.query(
+            func.sum(ReconRow.books_igst + ReconRow.books_cgst + ReconRow.books_sgst)
+        ).filter(ReconRow.state_name == state, ReconRow.category == 'books_only').scalar() or 0
+        last_run = ReconRun.query.filter(ReconRun.state == state, ReconRun.archived != True)\
+            .order_by(ReconRun.created_at.desc()).first()
+        last_upload = last_run.created_at.strftime('%d-%b-%Y') if last_run else None
+        last_period = last_run.period if last_run else None
+        if total == 0:
+            light = 'grey'
+        elif open_n == 0 and remarked == 0:
+            light = 'green'
+        elif open_n == 0:
+            light = 'yellow'
+        else:
+            light = 'red'
+        out.append({'state': state, 'total': total, 'open': open_n, 'remarked': remarked,
+                    'approved': approved, 'itc_risk': round(itc_risk),
+                    'last_upload': last_upload, 'last_period': last_period, 'light': light})
+    return jsonify(out)
+
+
+# ---- Feature: Approval reminders (stale remarked rows) ----
+@app.route('/api/approval-reminders')
+@login_required
+def api_approval_reminders():
+    since = now_ist() - timedelta(days=3)
+    q = ReconRow.query.filter(ReconRow.status == 'remarked', ReconRow.remarked_at <= since)
+    if not current_user.is_admin and current_user.state_list():
+        q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
+    count = q.count()
+    by_state = {}
+    for r in q.all():
+        by_state[r.state_name] = by_state.get(r.state_name, 0) + 1
+    return jsonify({'count': count, 'by_state': by_state})
+
+
+# ---- Feature: Locked periods list ----
+@app.route('/api/locked-periods')
+@login_required
+def api_locked_periods():
+    runs = ReconRun.query.filter(ReconRun.locked == True, ReconRun.archived != True).all()
+    return jsonify([{'period': r.period, 'state': r.state,
+                     'locked_at': r.locked_at.strftime('%d-%b-%Y') if r.locked_at else '',
+                     'locked_by': User.query.get(r.locked_by_id).name if r.locked_by_id else ''}
+                    for r in runs])
+
+
+# ---- Feature: Run diff report ----
+@app.route('/api/run/<int:run_id>/diff')
+@login_required
+def api_run_diff(run_id):
+    run = db.session.get(ReconRun, run_id)
+    if not run:
+        return jsonify({'error': 'Not found'}), 404
+    try:
+        summary = json.loads(run.summary_json or '{}')
+        diff = summary.get('diff', {})
+        return jsonify({'ok': True, 'diff': diff, 'period': run.period, 'state': run.state})
+    except Exception:
+        return jsonify({'ok': True, 'diff': {}})
+
+
+# ---- Feature: Bulk remark Excel template download ----
+@app.route('/api/bulk-remark/template')
+@login_required
+def bulk_remark_template():
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font
+    period = request.args.get('period', '')
+    state = request.args.get('state', '')
+    q = ReconRow.query
+    if period:
+        q = q.filter(ReconRow.period == period)
+    if state:
+        q = q.filter(ReconRow.state_name == state)
+    if not current_user.is_admin and current_user.state_list():
+        q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
+    rows = q.order_by(ReconRow.state_name, ReconRow.gstin).limit(5000).all()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Bulk Remarks'
+    headers = ['row_id', 'state', 'period', 'gstin', 'vendor', 'books_inv', 'gstn_inv',
+               'category', 'books_tax', 'current_status', 'current_remark', 'NEW_REMARK', 'NEW_REASON']
+    yellow = PatternFill('solid', fgColor='FFFF00')
+    bold = Font(bold=True)
+    for i, h in enumerate(headers, 1):
+        c = ws.cell(1, i, h)
+        c.font = bold
+        if h.startswith('NEW_'):
+            c.fill = yellow
+    reasons = ['Rate Difference', 'Invoice Not Filed', 'Period Mismatch',
+               'Duplicate Invoice', 'Cancelled Invoice', 'RCM Transaction', 'Other']
+    for row in rows:
+        tax = (row.books_igst or 0) + (row.books_cgst or 0) + (row.books_sgst or 0)
+        ws.append([row.id, row.state_name, row.period, row.gstin, row.vendor,
+                   row.books_inv, row.gstn_inv, row.category, round(tax, 2),
+                   row.status, row.team_remark or '', '', ''])
+    ws.column_dimensions['A'].width = 8
+    ws.column_dimensions['L'].width = 40
+    ws.column_dimensions['M'].width = 25
+    import io
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"bulk_remarks_{state or 'all'}_{period or 'all'}.xlsx"
+    return send_file(buf, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=fname)
+
+
+# ---- Feature: Bulk remark Excel upload ----
+@app.route('/api/bulk-remark/upload', methods=['POST'])
+@write_required
+def bulk_remark_upload():
+    import openpyxl
+    f = request.files.get('file')
+    if not f:
+        return jsonify({'error': 'No file'}), 400
+    wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+    ws = wb.active
+    headers = [str(c.value or '').strip() for c in next(ws.iter_rows(min_row=1, max_row=1))]
+    try:
+        id_col = headers.index('row_id')
+        remark_col = headers.index('NEW_REMARK')
+        reason_col = headers.index('NEW_REASON')
+    except ValueError:
+        return jsonify({'error': 'Missing columns: row_id, NEW_REMARK, NEW_REASON'}), 400
+    updated = skipped = 0
+    for data_row in ws.iter_rows(min_row=2, values_only=True):
+        row_id = data_row[id_col]
+        new_remark = str(data_row[remark_col] or '').strip()
+        new_reason = str(data_row[reason_col] or '').strip()
+        if not row_id or not new_remark:
+            skipped += 1
+            continue
+        row = db.session.get(ReconRow, int(row_id))
+        if not row:
+            skipped += 1
+            continue
+        if not current_user.is_admin and not current_user.can_see_state(row.state_name):
+            skipped += 1
+            continue
+        row.team_remark = new_remark
+        if new_reason:
+            row.team_reason = new_reason
+        if row.status == 'open':
+            row.status = 'remarked'
+        row.remarked_by_id = current_user.id
+        row.remarked_at = now_ist()
+        log_audit(row.id, current_user, 'remark', 'bulk_excel', '', new_remark)
+        updated += 1
+    db.session.commit()
+    return jsonify({'ok': True, 'updated': updated, 'skipped': skipped})
+
+
+# ---- Feature: CFO PDF (print-ready redirect) ----
+@app.route('/cfo-pdf')
+@admin_required
+def cfo_pdf():
+    return redirect(url_for('cfo_summary', _anchor='print') + '&print=1')
+
+
+# ---- Feature: 4: ITC-at-risk trend (month series) ----
 @app.route('/api/trend')
 @login_required
 def api_trend():

@@ -233,5 +233,24 @@
   WIOM GST Recon — Books vs GST Reconciliation Intelligence · Confidential · Auto-generated<br>
   ITC at Risk = tax on invoices in Books but missing from GSTR-2B
 </div>
+
+<!-- Print/PDF Button (hidden on print) -->
+<div style="position:fixed;bottom:28px;right:28px;display:flex;gap:10px;z-index:100;" class="no-print">
+  <button onclick="window.print()" style="background:#E0119D;color:#fff;border:none;border-radius:10px;padding:12px 22px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(224,17,157,.4);">
+    🖨️ Download PDF
+  </button>
+  <a href="/" style="background:#1C1C28;color:#B9B9CE;border:1px solid #2B2B3A;border-radius:10px;padding:12px 22px;font-size:14px;font-weight:600;text-decoration:none;">
+    ← Dashboard
+  </a>
+</div>
+
+<style>
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; padding: 0; }
+  .card, .section { break-inside: avoid; }
+  @page { margin: 18mm; size: A4; }
+}
+</style>
 </body>
 </html>

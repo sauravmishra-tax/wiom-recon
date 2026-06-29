@@ -303,6 +303,28 @@
     <div class="kpi"><div class="ic">✅</div><div class="n tnum" style="color:var(--green)">{{ stats.done }}</div><div class="l">Approved / resolved</div></div>
 </div>
 
+<!-- Approval Reminder Banner -->
+<div id="reminderBanner" style="display:none;background:rgba(255,165,0,.12);border:1px solid rgba(255,165,0,.4);border-radius:10px;padding:12px 18px;margin-bottom:16px;color:#ffb347;font-size:13px;">
+  ⏰ <span id="reminderText"></span> — <a href="{{ url_for('detail') }}" style="color:#ffb347;text-decoration:underline;">Review now →</a>
+</div>
+
+<!-- State Traffic Light Grid -->
+<div class="card" style="margin-bottom:16px;">
+  <h2 style="margin-bottom:14px;">🚦 State Health Status</h2>
+  <div id="stateHealth" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+    <div style="color:var(--gray);grid-column:1/-1;">Loading…</div>
+  </div>
+</div>
+
+<!-- My Work Section -->
+<div class="card" style="margin-bottom:16px;" id="myWorkCard">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <h2 style="margin:0;">📌 My Work <span class="muted" style="font-weight:400;">— assigned to me</span></h2>
+    <a href="{{ url_for('detail') }}?my=1" class="btn sm ghost">View all →</a>
+  </div>
+  <div id="myWorkBody"><span style="color:var(--gray)">Loading…</span></div>
+</div>
+
 <div class="card">
     <h2>🧾 Reconciliation Summary <span class="muted" style="font-weight:500;">— click a tile to open that tab</span></h2>
     <div id="totalBar" style="display:flex;gap:0;border-radius:10px;overflow:hidden;height:36px;margin-bottom:14px;font-size:12px;font-weight:700;"></div>
@@ -323,6 +345,11 @@
 
 <div class="card"><h2>📈 ITC-at-Risk Trend (month-on-month)</h2>
     <div style="height:240px;"><canvas id="trend"></canvas></div>
+</div>
+
+<div class="card">
+  <h2>📊 ITC at Risk — State-wise Trend (last 6 months)</h2>
+  <div style="height:260px;"><canvas id="stateTrendChart"></canvas></div>
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
@@ -631,6 +658,64 @@ fetch('/api/trend').then(r=>r.json()).then(t=>{
         options:{plugins:{legend:{labels:{color:css('--gray-light')}}},responsive:true,maintainAspectRatio:false,
             scales:{x:{ticks:{color:css('--gray-light')},grid:{display:false}},
                     y:{ticks:{color:css('--gray-light'),callback:v=>fmt(v)},grid:{color:css('--dark3')}}}}});
+});
+
+// State Traffic Light
+fetch('/api/dashboard-state-health').then(r=>r.json()).then(data=>{
+    const el=document.getElementById('stateHealth');
+    const lc={green:'#00c48c',yellow:'#f59e0b',red:'#ff4d6d',grey:'#555'};
+    const le={green:'🟢',yellow:'🟡',red:'🔴',grey:'⚪'};
+    el.innerHTML=data.map(s=>`
+    <a href="/detail?state=${encodeURIComponent(s.state)}" style="text-decoration:none;">
+      <div style="background:var(--dark2);border:1px solid ${lc[s.light]}44;border-radius:12px;padding:14px 16px;transition:border-color .2s;" onmouseover="this.style.borderColor='${lc[s.light]}'" onmouseout="this.style.borderColor='${lc[s.light]}44'">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-weight:700;font-size:13px;">${s.state}</span><span style="font-size:18px;">${le[s.light]}</span>
+        </div>
+        <div style="font-size:11px;color:var(--gray);line-height:1.9;">
+          <span style="color:var(--red)">⚠ ${s.open} open</span> · <span style="color:var(--blue)">💬 ${s.remarked} remarked</span> · <span style="color:var(--green)">✅ ${s.approved} done</span><br>
+          ITC risk: <b style="color:var(--red)">₹${fmt(s.itc_risk)}</b><br>
+          Last upload: ${s.last_upload||'Never'}${s.last_period?' ('+s.last_period+')':''}
+        </div>
+      </div>
+    </a>`).join('');
+});
+
+// My Work
+fetch('/api/rows?my=1').then(r=>r.json()).then(d=>{
+    const el=document.getElementById('myWorkBody');
+    if(!d.rows||!d.rows.length){el.innerHTML='<span style="color:var(--gray)">No rows assigned to you.</span>';return;}
+    el.innerHTML='<table><thead><tr><th>State</th><th>GSTIN</th><th>Invoice</th><th>Category</th><th>ITC Risk</th><th></th></tr></thead><tbody>'+
+    d.rows.slice(0,8).map(r=>`<tr>
+      <td>${r.state_name}</td>
+      <td><a href="/vendor/${r.gstin}" style="color:var(--blue);font-family:monospace;font-size:11px;">${r.gstin}</a></td>
+      <td style="font-family:monospace;font-size:11px;">${r.books_inv||r.gstn_inv||'—'}</td>
+      <td>${r.category.replace('_',' ')}</td>
+      <td class="num">₹${fmt(r.books_tax)}</td>
+      <td><a href="/detail?period=${r.period}&state=${encodeURIComponent(r.state_name)}" class="btn sm ghost">Open →</a></td>
+    </tr>`).join('')+'</tbody></table>';
+}).catch(()=>{document.getElementById('myWorkCard').style.display='none';});
+
+// Approval Reminder Banner
+fetch('/api/approval-reminders').then(r=>r.json()).then(d=>{
+    if(d.count>0){
+        document.getElementById('reminderText').textContent=d.count+' remarked rows waiting for approval 3+ days';
+        document.getElementById('reminderBanner').style.display='block';
+    }
+});
+
+// State-wise ITC Trend Chart
+fetch('/api/trend/by-state?months=6').then(r=>r.json()).then(d=>{
+    const canvas=document.getElementById('stateTrendChart');
+    if(!d.periods||!d.periods.length){canvas.parentElement.innerHTML='<span style="color:var(--gray)">No data yet.</span>';return;}
+    const pal=['#7C5CFF','#E0119D','#00c48c','#f59e0b','#60a5fa','#f87171'];
+    const datasets=Object.entries(d.states).map(([state,vals],i)=>({
+        label:state,data:vals,borderColor:pal[i%pal.length],backgroundColor:pal[i%pal.length]+'22',fill:false,tension:.3,pointRadius:4
+    }));
+    new Chart(canvas,{type:'line',data:{labels:d.periods,datasets},
+        options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{labels:{color:css('--gray-light'),font:{size:11}}}},
+            scales:{x:{ticks:{color:css('--gray-light')},grid:{display:false}},
+                    y:{ticks:{color:css('--gray-light'),callback:v=>'₹'+fmt(v)},grid:{color:css('--dark3')}}}}});
 });
 </script>
 {% endblock %}

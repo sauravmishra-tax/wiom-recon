@@ -5,6 +5,7 @@ as workflow rows, and sync the vendor master.
 Called after the 9-agent engine finishes a run.
 """
 import re as _re
+import json
 import pandas as pd
 from collections import Counter
 from datetime import datetime
@@ -309,11 +310,28 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
                     uploaded_at=a.uploaded_at))
             carried += 1
 
+    # ---- compute diff vs prior snapshot (for diff report) ----
+    new_keys = set(_carry_key(r) for r in ReconRow.query.filter_by(run_id=run.id).all())
+    old_keys = set(carry.keys()) | set(
+        _carry_key(r) for pid in prior_ids
+        for r in ReconRow.query.filter_by(run_id=pid).all()
+    ) if prior_ids else set()
+    diff = {
+        'new': len(new_keys - old_keys),
+        'removed': len(old_keys - new_keys),
+        'carried': carried,
+    }
+    try:
+        summary = json.loads(run.summary_json or '{}')
+        summary['diff'] = diff
+        run.summary_json = json.dumps(summary)
+    except Exception:
+        pass
+
     # ---- replace entire state snapshot: archive prior runs, preserve audit trail ----
     if prior_ids:
         old_row_ids = [r.id for r in ReconRow.query.filter(ReconRow.run_id.in_(prior_ids)).all()]
         if old_row_ids:
-            # Preserve audit trail — detach logs from deleted rows (set row_id=None, keep record)
             db.session.execute(
                 db.text('UPDATE audit_log SET row_id=NULL WHERE row_id IN :ids'),
                 {'ids': tuple(old_row_ids) if len(old_row_ids) > 1 else (old_row_ids[0], old_row_ids[0])}
@@ -321,7 +339,6 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
             RowComment.query.filter(RowComment.row_id.in_(old_row_ids)).delete(synchronize_session=False)
             RowAttachment.query.filter(RowAttachment.row_id.in_(old_row_ids)).delete(synchronize_session=False)
             ReconRow.query.filter(ReconRow.run_id.in_(prior_ids)).delete(synchronize_session=False)
-        # Archive old runs instead of deleting
         ReconRun.query.filter(ReconRun.id.in_(prior_ids)).update({'archived': True}, synchronize_session=False)
 
     run.total_rows = n

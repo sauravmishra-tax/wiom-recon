@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Vendor Detail · WIOM{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <h2 id="vendorName">Loading…</h2>
+        <div class="sub" id="vendorMeta">GSTIN: {{ gstin }}</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+        <a href="javascript:history.back()" class="btn ghost">← Back</a>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px;">
+    <div class="kpi" style="border-color:var(--red);">
+        <div class="ic">⚠️</div>
+        <div class="n tnum red" style="color:var(--red);">₹<span id="vItcRisk">—</span></div>
+        <div class="l">ITC at Risk</div>
+    </div>
+    <div class="kpi">
+        <div class="ic">📊</div>
+        <div class="n tnum" id="vTotal">—</div>
+        <div class="l">Total Rows</div>
+    </div>
+    <div class="kpi">
+        <div class="ic">✅</div>
+        <div class="n tnum" style="color:var(--green)" id="vMatched">—</div>
+        <div class="l">Matched</div>
+    </div>
+    <div class="kpi">
+        <div class="ic">📚</div>
+        <div class="n tnum" style="color:var(--red)" id="vBooksOnly">—</div>
+        <div class="l">Books Only</div>
+    </div>
+    <div class="kpi">
+        <div class="ic">🏆</div>
+        <div class="n tnum" style="color:var(--blue)" id="vGrade">—</div>
+        <div class="l">Filing Reliability</div>
+    </div>
+</div>
+
+<!-- Transaction Table -->
+<div class="card">
+    <h2>All Transactions</h2>
+    <div style="overflow-x:auto;">
+        <table id="vTable">
+            <thead><tr>
+                <th>Period</th><th>State</th><th>Category</th>
+                <th>Books Inv</th><th>GSTN Inv</th>
+                <th>Books Tax</th><th>GSTN Tax</th>
+                <th>Status</th><th>Remark</th>
+            </tr></thead>
+            <tbody><tr><td colspan="9" style="color:var(--gray);padding:16px;">Loading…</td></tr></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const gstin = {{ gstin|tojson }};
+const fmt = n => (n||0).toLocaleString('en-IN',{maximumFractionDigits:0});
+
+fetch('/api/vendor-rows/' + encodeURIComponent(gstin))
+.then(r=>r.json()).then(d=>{
+    document.getElementById('vendorName').textContent = d.vendor || gstin;
+    document.getElementById('vendorMeta').textContent = 'GSTIN: ' + gstin + ' · ' + d.count + ' transactions';
+
+    const rows = d.rows || [];
+    let matched=0, booksOnly=0, gstnOnly=0, itcRisk=0;
+    rows.forEach(r=>{
+        if(r.category==='matched') matched++;
+        else if(r.category==='books_only'){ booksOnly++; itcRisk+=r.books_tax||0; }
+        else if(r.category==='gstn_only') gstnOnly++;
+    });
+    const filed = matched + gstnOnly;
+    const denom = filed + booksOnly;
+    const reliability = denom ? Math.round(100*filed/denom) : 100;
+    const grade = reliability>=95?'A+':reliability>=80?'A':reliability>=60?'B':reliability>=40?'C':'D';
+
+    document.getElementById('vItcRisk').textContent = fmt(itcRisk);
+    document.getElementById('vTotal').textContent = rows.length;
+    document.getElementById('vMatched').textContent = matched;
+    document.getElementById('vBooksOnly').textContent = booksOnly;
+    document.getElementById('vGrade').textContent = grade + ' (' + reliability + '%)';
+
+    const catColor = {'matched':'var(--green)','books_only':'var(--red)','gstn_only':'var(--blue)'};
+    const statusColor = {'open':'var(--gray)','remarked':'var(--blue)','approved':'var(--green)','resolved':'var(--green)'};
+    const tbody = document.querySelector('#vTable tbody');
+    if(!rows.length){tbody.innerHTML='<tr><td colspan="9" style="color:var(--gray);padding:16px;">No transactions found.</td></tr>';return;}
+    tbody.innerHTML = rows.map(r=>`<tr>
+        <td><b>${r.period}</b></td>
+        <td>${r.state_name}</td>
+        <td style="color:${catColor[r.category]||'inherit'}">${r.category.replace('_',' ')}</td>
+        <td style="font-family:monospace;font-size:11px;">${r.books_inv||'—'}</td>
+        <td style="font-family:monospace;font-size:11px;">${r.gstn_inv||'—'}</td>
+        <td class="num">₹${fmt(r.books_tax)}</td>
+        <td class="num">₹${fmt(r.gstn_tax)}</td>
+        <td style="color:${statusColor[r.status]||'inherit'}">${r.status}</td>
+        <td style="max-width:200px;font-size:11px;color:var(--gray)">${r.team_remark||'—'}</td>
+    </tr>`).join('');
+});
+</script>
+{% endblock %}

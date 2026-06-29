@@ -134,6 +134,21 @@ function refresh(){
             clearInterval(poll);
             const dr=document.getElementById('doneRow'); dr.style.display='flex';
             document.getElementById('dlBtn').href='/download'+(s.run_id?('?run_id='+s.run_id):'');
+            // Show diff report
+            if(s.run_id){
+                fetch('/api/run/'+s.run_id+'/diff').then(r=>r.json()).then(d=>{
+                    if(d.ok && d.diff && (d.diff.new||d.diff.removed||d.diff.carried)){
+                        const df=d.diff;
+                        const box=document.createElement('div');
+                        box.style.cssText='margin-top:12px;padding:12px 16px;background:rgba(0,196,140,.08);border:1px solid rgba(0,196,140,.3);border-radius:8px;font-size:12px;color:#b9b9ce;line-height:2;';
+                        box.innerHTML='<b style="color:#00c48c">📊 Diff vs previous upload:</b><br>'
+                            +(df.new?`<span style="color:#00c48c">+${df.new} new invoices</span> &nbsp;`:'')
+                            +(df.removed?`<span style="color:#ff4d6a">-${df.removed} removed</span> &nbsp;`:'')
+                            +(df.carried?`<span style="color:#60a5fa">💬 ${df.carried} remarks carried over</span>`:'');
+                        document.getElementById('doneRow').after(box);
+                    }
+                }).catch(()=>{});
+            }
         }
     });
 }

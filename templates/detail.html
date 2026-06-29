@@ -3,10 +3,17 @@
 {% block content %}
 <div class="page-head">
     <div><h2 id="pageTitle">Detail &amp; Remarks</h2><div class="sub" id="pageSub">Report tabs · multi-select · remarks &amp; approvals</div></div>
-    <div style="display:flex;gap:10px;">
-        <a class="btn ghost" href="{{ url_for('import_remarks') }}">⬆ Import remarks</a>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a class="btn ghost" href="{{ url_for('import_remarks') }}">⬆ Import CSV</a>
+        <button class="btn ghost" onclick="dlBulkTemplate()" title="Download Excel template, fill NEW_REMARK column, re-upload">⬇ Bulk Remark Template</button>
+        <label class="btn ghost" style="cursor:pointer;" title="Upload filled bulk remark Excel">⬆ Bulk Remark Upload<input type="file" accept=".xlsx" style="display:none" onchange="uploadBulkRemarks(this)"></label>
         <button class="btn" onclick="exportXl()">⬇ Cumulative Excel</button>
     </div>
+</div>
+
+<!-- Locked Period Banner -->
+<div id="lockBanner" style="display:none;background:rgba(255,165,0,.12);border:1px solid rgba(255,165,0,.4);border-radius:10px;padding:11px 18px;margin-bottom:14px;color:#ffb347;font-size:13px;">
+  🔒 <span id="lockBannerText">This period is locked — edits are disabled.</span>
 </div>
 
 <div class="card" style="padding:16px;">
@@ -861,6 +868,46 @@ function sendVendorLevelEmail(){
 }
 function v(id){return document.getElementById(id).value;}
 function exportXl(){const q=new URLSearchParams(baseParams());window.location='/export?'+q;}
+
+// Bulk Remark Excel download
+function dlBulkTemplate(){
+    const p=baseParams();
+    window.location='/api/bulk-remark/template?period='+encodeURIComponent(p.period||'')+'&state='+encodeURIComponent(p.state||'');
+}
+
+// Bulk Remark Excel upload
+function uploadBulkRemarks(input){
+    const file=input.files[0]; if(!file) return;
+    const fd=new FormData(); fd.append('file',file);
+    fetch('/api/bulk-remark/upload',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{
+        if(d.error){alert('Error: '+d.error);return;}
+        alert('Done! Updated: '+d.updated+' rows, Skipped: '+d.skipped);
+        reloadAll();
+    }).catch(e=>alert('Upload failed: '+e.message));
+    input.value='';
+}
+
+// Locked period check
+(function(){
+    fetch('/api/locked-periods').then(r=>r.json()).then(locks=>{
+        if(!locks.length) return;
+        function checkLock(){
+            const period=document.getElementById('fPeriod')?.value||'';
+            const state=document.getElementById('fState')?.value||'';
+            const match=locks.find(l=>l.period===period&&(!state||l.state===state||l.state===''));
+            const banner=document.getElementById('lockBanner');
+            if(match){
+                document.getElementById('lockBannerText').textContent=
+                    'Period '+match.period+' is locked by '+match.locked_by+' on '+match.locked_at+' — edits disabled.';
+                banner.style.display='block';
+            } else { banner.style.display='none'; }
+        }
+        document.getElementById('fPeriod')?.addEventListener('change',checkLock);
+        document.getElementById('fState')?.addEventListener('change',checkLock);
+        checkLock();
+    });
+})();
 // load assignable Book-Keeping users into the bulk "Assign to" dropdown
 (function(){const sel=document.getElementById('bAssignee');if(!sel)return;
     fetch('/api/assignees').then(r=>r.json()).then(us=>{
