@@ -211,28 +211,20 @@ def persist_reconciled_df(run, df, vendor_map, run_state=None, run_state_code=No
 
 
 def _build_carry_map(run, run_state):
-    """Build carry map from ALL prior runs for the same STATE (any period).
-    Remarks follow the transaction (GSTIN+invoice), not the period.
-    Returns (carry_map, same_period_run_ids).
-    - carry_map: remarks from ALL periods for this state
-    - same_period_run_ids: only same state+period runs, which get replaced on upload"""
-    # Carry remarks from ALL periods for this state
+    """Full state replacement on every upload.
+    - Carry map: remarks/status/assignment from ALL prior runs for this state, keyed by GSTIN+invoice
+    - prior_ids: ALL prior runs for this state (all periods) — all get replaced
+    New upload = fresh snapshot of state. Old remarks follow matching transactions."""
     all_prior = ReconRun.query.filter(ReconRun.state == (run_state or ''),
                                       ReconRun.id != run.id).all()
+    prior_ids = [p.id for p in all_prior]
     carry = {}
-    if all_prior:
-        all_prior_ids = [p.id for p in all_prior]
-        for old in ReconRow.query.filter(ReconRow.run_id.in_(all_prior_ids)).all():
+    if prior_ids:
+        for old in ReconRow.query.filter(ReconRow.run_id.in_(prior_ids)).all():
             touched = (old.team_remark or old.team_reason or old.status != 'open'
                        or old.assigned_to_id or (old.followup_count or 0) > 0)
             if touched:
                 carry[_carry_key(old)] = old
-
-    # Only delete/replace runs for the same state+period (other months stay intact)
-    same_period = ReconRun.query.filter(ReconRun.state == (run_state or ''),
-                                        ReconRun.period == run.period,
-                                        ReconRun.id != run.id).all()
-    prior_ids = [p.id for p in same_period]
     return carry, prior_ids
 
 
