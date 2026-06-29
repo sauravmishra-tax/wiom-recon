@@ -135,15 +135,15 @@ def create_user():
 
     if role not in VALID_ROLES:
         role = 'user'
-    if not (name and email and pw):
-        flash('Name, email and password are required.', 'error')
+    if not (name and email):
+        flash('Name and email are required.', 'error')
         return redirect(url_for('auth.users'))
     if User.query.filter_by(email=email).first():
         flash(f'A user with email {email} already exists.', 'error')
         return redirect(url_for('auth.users'))
 
     u = User(name=name, email=email, role=role, title=title, states=states)
-    u.set_password(pw)
+    u.set_password(pw if pw else 'Wiom@123')  # default password if not specified
     db.session.add(u)
     db.session.commit()
     flash(f'User {name} created.', 'success')

@@ -165,6 +165,15 @@ def _run_migrations():
             set_setting(k, v)
             db.session.commit()
 
+    # One-time: reset all users to default password Wiom@123 if not already done
+    if not get_setting('default_pwd_reset_done'):
+        for u in User.query.all():
+            u.set_password('Wiom@123')
+        db.session.commit()
+        set_setting('default_pwd_reset_done', '1')
+        db.session.commit()
+        print('  [migration] All user passwords reset to Wiom@123')
+
 
 def _seed_admin(app):
     """Create the first manager account if no users exist."""
@@ -330,7 +339,7 @@ def run_reconciliation(file_path, period, label, user_id, run_state=None):
             processing_state['agent_results']['scrutiny'] = {
                 'status': r9['status'], 'checks': r9['checks'], 'stats': r9['stats']}
 
-            # ---- Persist into DB ----
+            # ---- Persist into DB (with rollback on any failure) ----
             add_log(0, 'Storing results into database for team review...')
             run = ReconRun(
                 period=period, state=run_state or '', label=label,
@@ -345,14 +354,20 @@ def run_reconciliation(file_path, period, label, user_id, run_state=None):
                 }))
             db.session.add(run)
             db.session.commit()
-            reconciled_dfs = [r2['data'].get('Reconciled'), r2['data'].get('Matched')]
-            reconciled_dfs = [d for d in reconciled_dfs if d is not None]
-            n, carried = persist_run(run, r3['inv_matched'], r3['books_unmatched'],
-                            r3['gstn_unmatched'], vendor_map=r2['vendor_map'],
-                            gst_cache=r2.get('gst_cache', {}), run_state=run_state,
-                            reconciled_dfs=reconciled_dfs)
+            try:
+                reconciled_dfs = [r2['data'].get('Reconciled'), r2['data'].get('Matched')]
+                reconciled_dfs = [d for d in reconciled_dfs if d is not None]
+                n, carried = persist_run(run, r3['inv_matched'], r3['books_unmatched'],
+                                r3['gstn_unmatched'], vendor_map=r2['vendor_map'],
+                                gst_cache=r2.get('gst_cache', {}), run_state=run_state,
+                                reconciled_dfs=reconciled_dfs)
+            except Exception as persist_err:
+                db.session.rollback()
+                ReconRun.query.filter_by(id=run.id).delete()
+                db.session.commit()
+                raise persist_err
             if carried:
-                add_log(0, f'Smart re-upload: replaced previous {run_state} {period} snapshot, '
+                add_log(0, f'Smart re-upload: replaced previous {run_state} snapshot, '
                            f'carried over remarks/status on {carried} matching invoices')
 
             # Auto-sync vendor master from Zoho if configured (best-effort)
@@ -1499,6 +1514,15 @@ def api_rows():
         q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
 
     rows = q.order_by(ReconRow.state_name, ReconRow.gstin).limit(2000).all()
+    # Batch load attachment counts (single query instead of N+1)
+    if rows:
+        row_ids = [r.id for r in rows]
+        counts = dict(db.session.execute(
+            db.text('SELECT row_id, COUNT(*) FROM row_attachments WHERE row_id IN :ids GROUP BY row_id'),
+            {'ids': tuple(row_ids) if len(row_ids) > 1 else (row_ids[0], row_ids[0])}
+        ).fetchall())
+        for r in rows:
+            r._attach_count = counts.get(r.id, 0)
     return jsonify({'rows': [r.to_dict() for r in rows], 'count': len(rows)})
 
 
@@ -1611,20 +1635,18 @@ def api_gstr3b():
     def base():
         q = ReconRow.query
         if not current_user.is_admin:
-            states = [s.strip() for s in (current_user.allowed_states or '').split(',') if s.strip()]
+            states = current_user.state_list()
             if states:
                 q = q.filter(ReconRow.state_name.in_(states))
-        if fy:
-            q = q.filter(ReconRow.financial_year == fy)
         if period:
-            q = q.filter(ReconRow.period <= period)  # cumulative: show all months up to selected
+            q = q.filter(ReconRow.period <= period)
         return q
 
     rows = base().with_entities(
         ReconRow.itc_table4,
         func.count(ReconRow.id).label('cnt'),
-        func.sum(ReconRow.igst + ReconRow.cgst + ReconRow.sgst).label('itc'),
-        func.sum(ReconRow.taxable_value).label('taxable'),
+        func.sum(ReconRow.books_igst + ReconRow.books_cgst + ReconRow.books_sgst).label('itc'),
+        func.sum(ReconRow.books_taxable).label('taxable'),
     ).group_by(ReconRow.itc_table4).all()
 
     buckets = {}
@@ -1909,41 +1931,32 @@ def scorecard_page():
 @login_required
 def api_scorecard():
     """Per-vendor compliance: how reliably they appear in GSTR-2B vs Books."""
-    rows = _filtered_rows_query().all()
-    agg = {}
-    for r in rows:
-        a = agg.get(r.gstin)
-        if a is None:
-            a = agg[r.gstin] = {'gstin': r.gstin, 'vendor': r.vendor, 'periods': set(),
-                                'matched': 0, 'books_only': 0, 'gstn_only': 0,
-                                'books_val': 0.0, 'itc_risk': 0.0, 'open': 0}
-        if r.vendor and (not a['vendor'] or a['vendor'] == r.gstin):
-            a['vendor'] = r.vendor
-        a['periods'].add(r.period)
-        tax = (r.books_igst or 0) + (r.books_cgst or 0) + (r.books_sgst or 0)
-        if r.category == 'matched':
-            a['matched'] += 1
-        elif r.category == 'books_only':
-            a['books_only'] += 1
-            a['books_val'] += r.books_total or 0
-            a['itc_risk'] += tax
-            if r.status not in ('approved', 'resolved'):
-                a['open'] += 1
-        elif r.category == 'gstn_only':
-            a['gstn_only'] += 1
+    from sqlalchemy import func, case
+    base = _filtered_rows_query()
+    agg_rows = base.with_entities(
+        ReconRow.gstin,
+        func.max(ReconRow.vendor).label('vendor'),
+        func.count(func.distinct(ReconRow.period)).label('months'),
+        func.sum(case((ReconRow.category == 'matched', 1), else_=0)).label('matched'),
+        func.sum(case((ReconRow.category == 'books_only', 1), else_=0)).label('books_only'),
+        func.sum(case((ReconRow.category == 'gstn_only', 1), else_=0)).label('gstn_only'),
+        func.sum(case((ReconRow.category == 'books_only',
+                       ReconRow.books_igst + ReconRow.books_cgst + ReconRow.books_sgst), else_=0)).label('itc_risk'),
+        func.sum(case(((ReconRow.category == 'books_only') & ReconRow.status.notin_(['approved','resolved']), 1), else_=0)).label('open'),
+    ).group_by(ReconRow.gstin).all()
     out = []
-    for a in agg.values():
-        filed = a['matched'] + a['gstn_only']        # appeared in 2B
-        not_filed = a['books_only']                   # in books but vendor didn't file
+    for a in agg_rows:
+        filed = (a.matched or 0) + (a.gstn_only or 0)
+        not_filed = a.books_only or 0
         denom = filed + not_filed
         score = round(100 * filed / denom) if denom else 100
         out.append({
-            'gstin': a['gstin'], 'vendor': a['vendor'], 'months': len(a['periods']),
-            'matched': a['matched'], 'books_only': not_filed, 'gstn_only': a['gstn_only'],
+            'gstin': a.gstin, 'vendor': a.vendor, 'months': a.months or 0,
+            'matched': a.matched or 0, 'books_only': not_filed, 'gstn_only': a.gstn_only or 0,
             'reliability': score, 'grade': _grade(score),
-            'itc_risk': round(a['itc_risk']), 'open': a['open'],
+            'itc_risk': round(a.itc_risk or 0), 'open': a.open or 0,
         })
-    out.sort(key=lambda x: (x['reliability'], -x['itc_risk']))  # worst first
+    out.sort(key=lambda x: (x['reliability'], -x['itc_risk']))
     return jsonify({'rows': out, 'count': len(out)})
 
 
@@ -2745,37 +2758,6 @@ def fix_fully_reconciled_status():
     ).update({'status': 'approved'}, synchronize_session=False)
     db.session.commit()
     return jsonify({'ok': True, 'msg': f'{updated} rows updated to approved.'})
-
-
-@app.route('/unlock-login/<token>', methods=['GET'])
-def unlock_login(token):
-    """Emergency: clear failed login lockout + list users. Token = sha256(SECRET_KEY)[:8]."""
-    import hashlib
-    expected = hashlib.sha256(app.config['SECRET_KEY'].encode()).hexdigest()[:8]
-    if token != expected:
-        return 'Invalid token', 403
-    from models import LoginEvent
-    deleted = LoginEvent.query.filter(LoginEvent.success == False).delete(synchronize_session=False)
-    db.session.commit()
-    users = User.query.order_by(User.id).all()
-    rows = ''.join(f'<tr><td>{u.id}</td><td>{u.name}</td><td>{u.email}</td><td>{u.role}</td>'
-                   f'<td><a href="/unlock-login/{token}/promote/{u.id}">Make superadmin</a></td></tr>'
-                   for u in users)
-    return f'<p>Cleared {deleted} failed login events.</p><table border=1>{rows}</table>'
-
-
-@app.route('/unlock-login/<token>/promote/<int:uid>', methods=['GET'])
-def promote_superadmin(token, uid):
-    import hashlib
-    expected = hashlib.sha256(app.config['SECRET_KEY'].encode()).hexdigest()[:8]
-    if token != expected:
-        return 'Invalid token', 403
-    u = User.query.get(uid)
-    if not u:
-        return 'User not found', 404
-    u.role = 'superadmin'
-    db.session.commit()
-    return f'{u.name} ({u.email}) is now superadmin.'
 
 
 @app.route('/settings/clear-recon', methods=['POST'])

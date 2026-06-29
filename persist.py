@@ -296,6 +296,7 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
             row.followup_at, row.followup_by_id = old.followup_at, old.followup_by_id
             row.followup_count, row.followup_note = old.followup_count, old.followup_note
             row.assigned_to_id = old.assigned_to_id
+            row.itc_table4 = old.itc_table4  # carry GSTR-3B table bucket
             for c in RowComment.query.filter_by(row_id=old.id).all():
                 db.session.add(RowComment(row_id=row.id, user_id=c.user_id,
                     user_name=c.user_name, user_role=c.user_role,

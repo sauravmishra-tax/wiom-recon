@@ -218,9 +218,7 @@ class ReconRow(db.Model):
             'assigned_to': self.assigned_to.name if self.assigned_to else '',
             'assigned_to_id': self.assigned_to_id,
             'itc_table4': self.itc_table4 or '',
-            'attach_count': db.session.execute(
-                db.text('SELECT COUNT(*) FROM row_attachments WHERE row_id=:rid'),
-                {'rid': self.id}).scalar() or 0,
+            'attach_count': getattr(self, '_attach_count', None) or 0,
         }
 
 

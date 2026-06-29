@@ -40,7 +40,7 @@ class Config:
     # ---- First admin (manager) — created on first launch if no users exist ----
     ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'saurav.mishra@wiom.in')
     ADMIN_NAME = os.environ.get('ADMIN_NAME', 'Saurav Mishra')
-    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')  # change after first login
+    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Wiom@123')
 
     # ---- Server ----
     PORT = int(os.environ.get('PORT', '5000'))
