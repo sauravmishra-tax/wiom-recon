@@ -2754,6 +2754,19 @@ def fix_fully_reconciled_status():
     return jsonify({'ok': True, 'msg': f'{updated} rows updated to approved.'})
 
 
+@app.route('/unlock-login/<token>', methods=['GET'])
+def unlock_login(token):
+    """Emergency: clear failed login lockout. Token = first 8 chars of SECRET_KEY."""
+    import hashlib
+    expected = hashlib.sha256(app.config['SECRET_KEY'].encode()).hexdigest()[:8]
+    if token != expected:
+        return 'Invalid token', 403
+    from models import LoginEvent
+    deleted = LoginEvent.query.filter(LoginEvent.success == False).delete(synchronize_session=False)
+    db.session.commit()
+    return f'Cleared {deleted} failed login events. You can now log in.'
+
+
 @app.route('/settings/clear-recon', methods=['POST'])
 @superadmin_required
 def clear_recon_data():
