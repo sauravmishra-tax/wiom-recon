@@ -114,6 +114,13 @@ function startUpload(){
     document.getElementById('goBtn').disabled=true;
     fetch('/upload',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
         if(d.error){alert(d.error);document.getElementById('goBtn').disabled=false;return;}
+        if(d.period && d.period !== period){
+            const m=d.period.split('-'),names=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            document.getElementById('period').value=d.period;
+            const nb=document.createElement('small'); nb.style.cssText='color:#f59e0b;display:block;margin-top:4px';
+            nb.textContent='Period auto-corrected to '+(names[+m[1]]||m[1])+' '+m[0]+' (from file header)';
+            const pd=document.getElementById('period').closest('div'); if(!pd.querySelector('small'))pd.appendChild(nb);
+        }
         document.getElementById('progressCard').style.display='block';
         poll=setInterval(refresh,900); refresh();
     });
