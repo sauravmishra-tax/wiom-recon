@@ -1460,7 +1460,7 @@ def api_rows():
     only_mismatch = request.args.get('mismatch') == '1'
 
     if period and period != 'all':
-        q = q.filter(ReconRow.period == period)
+        q = q.filter(ReconRow.period <= period)  # cumulative: show all months up to selected
     if state and state != 'all':
         q = q.filter(ReconRow.state_name == state)
     if category and category != 'all':
@@ -1573,7 +1573,7 @@ def api_counts():
         state = request.args.get('state')
         search = request.args.get('q', '').strip()
         if period and period != 'all':
-            q = q.filter(ReconRow.period == period)
+            q = q.filter(ReconRow.period <= period)  # cumulative: show all months up to selected
         if state and state != 'all':
             q = q.filter(ReconRow.state_name == state)
         q = _apply_fy(q, request.args.get('fy'))
@@ -1624,7 +1624,7 @@ def api_gstr3b():
         if fy:
             q = q.filter(ReconRow.financial_year == fy)
         if period:
-            q = q.filter(ReconRow.period == period)
+            q = q.filter(ReconRow.period <= period)  # cumulative: show all months up to selected
         return q
 
     rows = base().with_entities(
@@ -1826,7 +1826,7 @@ def _filtered_rows_query():
     state = request.args.get('state')
     search = request.args.get('q', '').strip()
     if period and period != 'all':
-        q = q.filter(ReconRow.period == period)
+        q = q.filter(ReconRow.period <= period)  # cumulative: show all months up to selected
     if state and state != 'all':
         q = q.filter(ReconRow.state_name == state)
     q = _apply_fy(q, request.args.get('fy'))

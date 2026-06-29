@@ -211,12 +211,14 @@ def persist_reconciled_df(run, df, vendor_map, run_state=None, run_state_code=No
 
 
 def _build_carry_map(run, run_state):
-    """Find ALL prior runs for the same STATE (any period) and build a carry map.
-    Each upload is cumulative (May file = Apr+May data), so new upload replaces
-    the entire state snapshot. Remarks from the old rows are carried to matching
-    invoices in the new upload so the team never has to re-enter them.
+    """Find prior runs for the same STATE + PERIOD and build a carry map.
+    Each upload is per-period (April file = April data only). Re-uploading the
+    same state+period replaces that period's snapshot only. Other months are
+    kept intact so data accumulates: April run + May run + June run all coexist.
+    Remarks from the old same-period rows are carried to matching invoices.
     Returns (carry_map, prior_run_ids)."""
     prior = ReconRun.query.filter(ReconRun.state == (run_state or ''),
+                                  ReconRun.period == run.period,
                                   ReconRun.id != run.id).all()
     prior_ids = [p.id for p in prior]
     carry = {}
