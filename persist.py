@@ -211,24 +211,28 @@ def persist_reconciled_df(run, df, vendor_map, run_state=None, run_state_code=No
 
 
 def _build_carry_map(run, run_state):
-    """Find prior runs for the same STATE + PERIOD and build a carry map.
-    Each upload is per-period (April file = April data only). Re-uploading the
-    same state+period replaces that period's snapshot only. Other months are
-    kept intact so data accumulates: April run + May run + June run all coexist.
-    Remarks from the old same-period rows are carried to matching invoices.
-    Returns (carry_map, prior_run_ids)."""
-    prior = ReconRun.query.filter(ReconRun.state == (run_state or ''),
-                                  ReconRun.period == run.period,
-                                  ReconRun.id != run.id).all()
-    prior_ids = [p.id for p in prior]
+    """Build carry map from ALL prior runs for the same STATE (any period).
+    Remarks follow the transaction (GSTIN+invoice), not the period.
+    Returns (carry_map, same_period_run_ids).
+    - carry_map: remarks from ALL periods for this state
+    - same_period_run_ids: only same state+period runs, which get replaced on upload"""
+    # Carry remarks from ALL periods for this state
+    all_prior = ReconRun.query.filter(ReconRun.state == (run_state or ''),
+                                      ReconRun.id != run.id).all()
     carry = {}
-    if prior_ids:
-        for old in ReconRow.query.filter(ReconRow.run_id.in_(prior_ids)).all():
-            # Only carry rows that team has actually worked on (skip pristine open rows)
+    if all_prior:
+        all_prior_ids = [p.id for p in all_prior]
+        for old in ReconRow.query.filter(ReconRow.run_id.in_(all_prior_ids)).all():
             touched = (old.team_remark or old.team_reason or old.status != 'open'
                        or old.assigned_to_id or (old.followup_count or 0) > 0)
             if touched:
                 carry[_carry_key(old)] = old
+
+    # Only delete/replace runs for the same state+period (other months stay intact)
+    same_period = ReconRun.query.filter(ReconRun.state == (run_state or ''),
+                                        ReconRun.period == run.period,
+                                        ReconRun.id != run.id).all()
+    prior_ids = [p.id for p in same_period]
     return carry, prior_ids
 
 
