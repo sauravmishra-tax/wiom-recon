@@ -2756,7 +2756,7 @@ def fix_fully_reconciled_status():
 
 @app.route('/unlock-login/<token>', methods=['GET'])
 def unlock_login(token):
-    """Emergency: clear failed login lockout. Token = first 8 chars of SECRET_KEY."""
+    """Emergency: clear failed login lockout + list users. Token = sha256(SECRET_KEY)[:8]."""
     import hashlib
     expected = hashlib.sha256(app.config['SECRET_KEY'].encode()).hexdigest()[:8]
     if token != expected:
@@ -2764,7 +2764,25 @@ def unlock_login(token):
     from models import LoginEvent
     deleted = LoginEvent.query.filter(LoginEvent.success == False).delete(synchronize_session=False)
     db.session.commit()
-    return f'Cleared {deleted} failed login events. You can now log in.'
+    users = User.query.order_by(User.id).all()
+    rows = ''.join(f'<tr><td>{u.id}</td><td>{u.name}</td><td>{u.email}</td><td>{u.role}</td>'
+                   f'<td><a href="/unlock-login/{token}/promote/{u.id}">Make superadmin</a></td></tr>'
+                   for u in users)
+    return f'<p>Cleared {deleted} failed login events.</p><table border=1>{rows}</table>'
+
+
+@app.route('/unlock-login/<token>/promote/<int:uid>', methods=['GET'])
+def promote_superadmin(token, uid):
+    import hashlib
+    expected = hashlib.sha256(app.config['SECRET_KEY'].encode()).hexdigest()[:8]
+    if token != expected:
+        return 'Invalid token', 403
+    u = User.query.get(uid)
+    if not u:
+        return 'User not found', 404
+    u.role = 'superadmin'
+    db.session.commit()
+    return f'{u.name} ({u.email}) is now superadmin.'
 
 
 @app.route('/settings/clear-recon', methods=['POST'])
