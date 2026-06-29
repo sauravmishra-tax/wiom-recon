@@ -1400,13 +1400,6 @@ def upload():
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], f'{ts}_{filename}')
     file.save(filepath)
 
-    # Auto-detect period from file header (e.g. "GSTR-2B (April - 2026)") and
-    # override the user's form selection so data lands under the correct month.
-    file_period = derive_period_from_file(filepath)
-    if file_period and file_period != period:
-        add_log(0, f'Period auto-corrected from file header: {period} -> {file_period}')
-        period = file_period
-
     reset_state()
     add_log(0, f'File uploaded for {run_state} ({period}): {filename}')
     threading.Thread(target=run_reconciliation,
