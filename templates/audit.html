@@ -7,9 +7,17 @@
 <div class="card" style="padding:16px;">
     <div style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:12px;align-items:end;">
         <div><label>Action</label><select id="fAction" onchange="load()">
-            <option value="all">All actions</option><option value="remark">Remark</option>
-            <option value="approve">Approve</option><option value="resolve">Resolve</option>
-            <option value="reopen">Reopen</option></select></div>
+            <option value="all">All actions</option>
+            <option value="upload">Upload</option>
+            <option value="remark">Remark</option>
+            <option value="approve">Approve</option>
+            <option value="resolve">Resolve</option>
+            <option value="reject">Reject</option>
+            <option value="reopen">Reopen</option>
+            <option value="assign">Assign</option>
+            <option value="lock">Lock</option>
+            <option value="unlock">Unlock</option>
+            <option value="followup">Follow-up</option></select></div>
         <div><label>State</label><select id="fState" onchange="load()">
             <option value="all">All states</option>
             {% for s in states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div>
@@ -46,7 +54,15 @@ function load(){
             '<tr><td colspan="7" style="padding:22px;color:var(--gray)">No audit entries yet.</td></tr>';
     });
 }
-function pillFor(a){return a==='remark'?'remarked':(a==='reopen'?'open':'approved');}
+function pillFor(a){
+    if(a==='remark'||a==='followup') return 'remarked';
+    if(a==='approve'||a==='resolve'||a==='lock') return 'approved';
+    if(a==='reject') return 'rejected';
+    if(a==='reopen'||a==='unlock') return 'open';
+    if(a==='upload') return 'upload';
+    if(a==='assign') return 'assigned';
+    return '';
+}
 function val(id){return document.getElementById(id).value;}
 load();
 </script>

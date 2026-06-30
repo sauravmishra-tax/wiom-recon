@@ -385,6 +385,10 @@ def run_reconciliation(file_path, period, label, user_id, run_state=None):
                                 r3['gstn_unmatched'], vendor_map=r2['vendor_map'],
                                 gst_cache=r2.get('gst_cache', {}), run_state=run_state,
                                 reconciled_dfs=reconciled_dfs)
+                log_audit(None, current_user, 'upload',
+                          'file_upload', '',
+                          f'State: {run_state} | Period: {run.period} | Rows: {n} | Run ID: {run.id}')
+                db.session.commit()
             except Exception as persist_err:
                 db.session.rollback()
                 ReconRun.query.filter_by(id=run.id).delete()
@@ -1403,22 +1407,25 @@ def api_audit():
     state = request.args.get('state')
     search = request.args.get('q', '').strip()
     # join audit -> row for GSTIN/state context
-    q = db.session.query(AuditLog, ReconRow).join(
+    q = db.session.query(AuditLog, ReconRow).outerjoin(
         ReconRow, AuditLog.row_id == ReconRow.id)
     if action and action != 'all':
         q = q.filter(AuditLog.action == action)
     if state and state != 'all':
-        q = q.filter(ReconRow.state_name == state)
+        q = q.filter(db.or_(ReconRow.state_name == state, AuditLog.row_id == None))
     if search:
         like = f'%{search}%'
-        q = q.filter(ReconRow.gstin.like(like) | ReconRow.vendor.like(like) |
-                     AuditLog.user_name.like(like))
+        q = q.filter(db.or_(ReconRow.gstin.like(like), ReconRow.vendor.like(like),
+                     AuditLog.user_name.like(like), AuditLog.new_value.like(like)))
     rows = q.order_by(AuditLog.created_at.desc()).limit(1000).all()
     return jsonify([{
         'at': l.created_at.strftime('%d-%b-%Y %H:%M'),
         'user': l.user_name, 'action': l.action,
-        'gstin': r.gstin, 'vendor': r.vendor, 'state': r.state_name,
-        'period': r.period, 'new': l.new_value, 'old': l.old_value,
+        'gstin': r.gstin if r else '',
+        'vendor': r.vendor if r else '',
+        'state': r.state_name if r else '',
+        'period': r.period if r else '',
+        'new': l.new_value, 'old': l.old_value,
     } for l, r in rows])
 
 
@@ -2221,6 +2228,10 @@ def api_lock_run(run_id):
     run.locked = lock
     run.locked_by_id = current_user.id if lock else None
     run.locked_at = now_ist() if lock else None
+    action_label = 'lock' if lock else 'unlock'
+    log_audit(None, current_user, action_label,
+              'period_lock', '',
+              f'State: {run.state} | Period: {run.period} | Run ID: {run.id}')
     db.session.commit()
     return jsonify({'ok': True, 'locked': run.locked})
 
@@ -2244,6 +2255,9 @@ def api_lock_by_period():
         run.locked = (action == 'lock')
         run.locked_by_id = current_user.id if action == 'lock' else None
         run.locked_at = now_ist() if action == 'lock' else None
+        log_audit(None, current_user, action,
+                  'period_lock', '',
+                  f'State: {run.state} | Period: {run.period} | Run ID: {run.id}')
     db.session.commit()
     return jsonify({'ok': True, 'locked': action == 'lock', 'count': len(runs)})
 
