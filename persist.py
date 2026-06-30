@@ -251,10 +251,11 @@ def persist_run(run, inv_matched, books_unmatched, gstn_unmatched,
       replaced with the fresh snapshot. Team remarks/reasons/status/assignment/comments
       are carried over to matching invoices so no rework is needed.
     """
-    # FIX 4 — deduplicate input rows before persisting
-    inv_matched     = _dedup(inv_matched or [],     lambda r: (_s(r.get('GSTIN', '')), (r.get('Transaction Number') or r.get('Books_Inv') or r.get('Books Inv', '')).strip(), ''))
-    books_unmatched = _dedup(books_unmatched or [], lambda r: (_s(r.get('GSTIN', '')), (r.get('Transaction Number', '') or '').strip(), ''))
-    gstn_unmatched  = _dedup(gstn_unmatched or [],  lambda r: (_s(r.get('GSTIN', '')), '', (r.get('Transaction Number', '') or '').strip()))
+    # Deduplicate input rows before persisting
+    # books/gstn_unmatched use 'Inv' key; inv_matched uses 'Books_Inv'/'GSTN_Inv'
+    inv_matched     = _dedup(inv_matched or [],     lambda r: (_s(r.get('GSTIN', '')), _s(r.get('Books_Inv') or r.get('Books Inv', '')), _s(r.get('GSTN_Inv', ''))))
+    books_unmatched = _dedup(books_unmatched or [], lambda r: (_s(r.get('GSTIN', '')), _s(r.get('Inv', '')), ''))
+    gstn_unmatched  = _dedup(gstn_unmatched or [],  lambda r: (_s(r.get('GSTIN', '')), '', _s(r.get('Inv', ''))))
 
     if vendor_map:
         sync_vendor_master(vendor_map, gst_cache)
