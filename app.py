@@ -1358,16 +1358,24 @@ def slack_send():
 
 
 def _summary_stats_all():
-    """Org-wide stats (no user state restriction) for scheduled reports."""
-    q = ReconRow.query
-    itc = sum((r.books_igst or 0) + (r.books_cgst or 0) + (r.books_sgst or 0)
-              for r in q.filter(ReconRow.category == 'books_only').all())
+    """Org-wide stats (no user state restriction) for scheduled reports. Single query."""
+    from sqlalchemy import func, case
+    row = db.session.query(
+        func.count().label('total'),
+        func.sum(case((ReconRow.status == 'open', 1), else_=0)).label('open'),
+        func.sum(case((ReconRow.status == 'remarked', 1), else_=0)).label('remarked'),
+        func.sum(case((ReconRow.status.in_(['approved', 'resolved']), 1), else_=0)).label('done'),
+        func.sum(case((ReconRow.category == 'books_only',
+                       func.coalesce(ReconRow.books_igst, 0) +
+                       func.coalesce(ReconRow.books_cgst, 0) +
+                       func.coalesce(ReconRow.books_sgst, 0)), else_=0)).label('itc_risk'),
+    ).one()
     return {
-        'total': q.count(),
-        'open': q.filter(ReconRow.status == 'open').count(),
-        'remarked': q.filter(ReconRow.status == 'remarked').count(),
-        'done': q.filter(ReconRow.status.in_(['approved', 'resolved'])).count(),
-        'itc_risk': round(itc),
+        'total': row.total or 0,
+        'open': row.open or 0,
+        'remarked': row.remarked or 0,
+        'done': row.done or 0,
+        'itc_risk': round(row.itc_risk or 0),
     }
 
 
@@ -2737,9 +2745,11 @@ def api_approval_reminders():
 @login_required
 def api_locked_periods():
     runs = ReconRun.query.filter(ReconRun.locked == True, ReconRun.archived != True).all()
+    user_ids = {r.locked_by_id for r in runs if r.locked_by_id}
+    users = {u.id: u.name for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
     return jsonify([{'period': r.period, 'state': r.state,
                      'locked_at': r.locked_at.strftime('%d-%b-%Y') if r.locked_at else '',
-                     'locked_by': User.query.get(r.locked_by_id).name if r.locked_by_id else ''}
+                     'locked_by': users.get(r.locked_by_id, '') if r.locked_by_id else ''}
                     for r in runs])
 
 
@@ -2813,7 +2823,10 @@ def bulk_remark_upload():
     f = request.files.get('file')
     if not f:
         return jsonify({'error': 'No file'}), 400
-    wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+    try:
+        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+    except Exception:
+        return jsonify({'error': 'Invalid or corrupted Excel file. Download the template first.'}), 400
     ws = wb.active
     headers = [str(c.value or '').strip() for c in next(ws.iter_rows(min_row=1, max_row=1))]
     try:
@@ -2821,7 +2834,7 @@ def bulk_remark_upload():
         remark_col = headers.index('NEW_REMARK')
         reason_col = headers.index('NEW_REASON')
     except ValueError:
-        return jsonify({'error': 'Missing columns: row_id, NEW_REMARK, NEW_REASON'}), 400
+        return jsonify({'error': 'Missing columns: row_id, NEW_REMARK, NEW_REASON. Download the template first.'}), 400
     updated = skipped = 0
     for data_row in ws.iter_rows(min_row=2, values_only=True):
         row_id = data_row[id_col]

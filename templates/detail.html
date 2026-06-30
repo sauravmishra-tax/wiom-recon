@@ -632,10 +632,16 @@ function saveTable4(){
     });
 }
 function saveRemark(){fetch(`/api/row/${cur.id}/remark`,{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({remark:v('mRemark'),reason:v('mReason')})}).then(r=>r.json()).then(d=>{if(d.ok){closeModal();load();refreshCounts();toast('Remark saved ✓');}else toast(d.error||'Save failed','error');});}
+    body:JSON.stringify({remark:v('mRemark'),reason:v('mReason')})})
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(d=>{if(d.ok){closeModal();load();refreshCounts();toast('Remark saved ✓');}else toast(d.error||'Save failed','error');})
+    .catch(e=>toast(e.message||'Save failed','error'));}
 function single(action){const note=action==='resolve'?prompt('Resolution note (optional):')||'':'';
     fetch(`/api/row/${cur.id}/approve`,{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({action,note})}).then(r=>r.json()).then(d=>{if(d.ok){closeModal();load();refreshCounts();toast('Action applied ✓');}else toast(d.error||'Failed','error');});}
+    body:JSON.stringify({action,note})})
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(d=>{if(d.ok){closeModal();load();refreshCounts();toast('Action applied ✓');}else toast(d.error||'Failed','error');})
+    .catch(e=>toast(e.message||'Action failed','error'));}
 function doFollowup(){
     const note=prompt('Follow-up note (e.g. emailed vendor for GSTR-1):')||'';
     // open a pre-filled mail draft for the team to actually send
@@ -1118,9 +1124,10 @@ function saveInlineEdit(){
     const reason=document.getElementById('ieReason').value;
     if(!remark&&!reason){closeInlineEdit();return;}
     fetch(`/api/row/${_ieRowId}/remark`,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({remark,reason})}).then(r=>r.json()).then(d=>{
-        if(d.ok){closeInlineEdit();load();refreshCounts();toast('Remark saved ✓');}else toast(d.error||'Failed','error');
-    });
+        body:JSON.stringify({remark,reason})})
+    .then(r=>{if(!r.ok&&r.status===404)throw new Error('Row not found — may have been deleted.');return r.json();})
+    .then(d=>{if(d.ok){closeInlineEdit();load();refreshCounts();toast('Remark saved ✓');}else toast(d.error||'Failed','error');})
+    .catch(e=>toast(e.message||'Save failed','error'));
 }
 
 // ── Restore Filters from localStorage (if no URL params) ──
