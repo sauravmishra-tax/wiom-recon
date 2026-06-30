@@ -251,11 +251,6 @@
         #tutPrev:hover{background:var(--dark3);color:var(--white);}
         #tutNext{background:var(--grad);color:#fff;box-shadow:0 4px 14px rgba(224,17,157,.28);}
         #tutNext:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(224,17,157,.4);}
-        #tutHelpBtn{background:rgba(255,255,255,.12);border:none;color:#fff;width:36px;height:36px;
-            border-radius:10px;cursor:pointer;font-size:15px;font-weight:800;font-family:inherit;
-            display:flex;align-items:center;justify-content:center;transition:.15s;margin-left:4px;
-            flex-shrink:0;}
-        #tutHelpBtn:hover{background:rgba(255,255,255,.22);transform:translateY(-1px);}
         @media(max-width:640px){
             #tutSidebar{display:none;}
             #tutMain{padding:22px 20px 18px;}
@@ -287,8 +282,7 @@
             <a href="{{ url_for('settings_page') }}" class="navlink {{ 'active' if request.endpoint=='settings_page' }}">Settings</a>
             {% endif %}
             <a href="{{ url_for('workflow_page') }}" class="navlink {{ 'active' if request.endpoint=='workflow_page' }}" title="Team Workflow Guide">📋 Workflow</a>
-            <button id="tutHelpBtn" onclick="openTutorial()" title="App Tutorial — Help">?</button>
-            <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle light / dark" aria-label="Toggle theme"></button>
+<button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle light / dark" aria-label="Toggle theme"></button>
             <div class="user-chip">
                 <div class="u-avatar" id="userAvatar" title="{{ current_user.name }}"></div>
                 <span><b>{{ current_user.name }}</b>{% if current_user.title %}<br><span style="font-size:10px;color:#c9b6d6;">{{ current_user.title }}</span>{% endif %}<br><span class="badge {{ current_user.role }}">{{ current_user.role_display }}</span></span>
