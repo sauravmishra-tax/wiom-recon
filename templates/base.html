@@ -527,25 +527,25 @@ function goTo(idx){
   renderStep();
 }
 
-function tutNav(dir){
+window.tutNav = function(dir){
   if(seen.indexOf(cur)<0) seen.push(cur);
   if(dir===1 && cur===STEPS.length-1){closeTutorial(true);return;}
   cur = Math.max(0, Math.min(STEPS.length-1, cur+dir));
   renderStep();
-}
+};
 
-function openTutorial(fresh){
+window.openTutorial = function(fresh){
   cur = fresh?0:cur;
   seen = [];
   document.getElementById('tutOverlay').classList.add('show');
   renderStep();
-}
+};
 
-function closeTutorial(completed){
+window.closeTutorial = function(completed){
   document.getElementById('tutOverlay').classList.remove('show');
   try{localStorage.setItem('wiom_tut_v2','done');}catch(e){}
   if(completed) toast('Tutorial complete! Kisi bhi waqt <b>?</b> button se dobara dekho.','success',4000);
-}
+};
 
 // Keyboard support
 document.addEventListener('keydown',function(e){
