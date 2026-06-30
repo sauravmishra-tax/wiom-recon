@@ -189,6 +189,26 @@ def _run_migrations():
             set_setting(k, v)
             db.session.commit()
 
+    # One-time: backfill existing RowComments into AuditLog
+    if not get_setting('comments_backfilled_v1'):
+        already = {(e.row_id, e.new_value) for e in
+                   AuditLog.query.filter_by(action='comment').all()}
+        backfilled = 0
+        for c in RowComment.query.all():
+            if (c.row_id, c.text) not in already:
+                db.session.add(AuditLog(
+                    row_id=c.row_id, user_id=c.user_id, user_name=c.user_name,
+                    action='comment', field='discussion',
+                    old_value='', new_value=c.text,
+                    created_at=c.created_at,
+                ))
+                backfilled += 1
+        db.session.commit()
+        set_setting('comments_backfilled_v1', '1')
+        db.session.commit()
+        if backfilled:
+            print(f'  [migration] Backfilled {backfilled} discussion comments into audit log')
+
     # One-time: reset all users to default password Wiom@123 if not already done
     if not get_setting('default_pwd_reset_done'):
         for u in User.query.all():
