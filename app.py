@@ -2132,6 +2132,26 @@ def api_comments(row_id):
                      'at': c.created_at.strftime('%d-%b-%Y %H:%M')} for c in cs])
 
 
+# ---- Row history (all audit log entries for a row) ----
+@app.route('/api/row/<int:row_id>/history')
+@login_required
+def api_row_history(row_id):
+    row = db.session.get(ReconRow, row_id)
+    if not row:
+        abort(404)
+    if not current_user.can_see_state(row.state_name):
+        abort(403)
+    entries = AuditLog.query.filter_by(row_id=row_id).order_by(AuditLog.created_at.desc()).all()
+    return jsonify([{
+        'user': e.user_name,
+        'action': e.action,
+        'field': e.field,
+        'old': e.old_value,
+        'new': e.new_value,
+        'at': e.created_at.strftime('%d-%b-%Y %H:%M'),
+    } for e in entries])
+
+
 # ---- Attachments (invoice images, email screenshots, PDFs) ----
 ATTACH_DIR = os.path.join(BASE_DIR, 'attachments')
 os.makedirs(ATTACH_DIR, exist_ok=True)

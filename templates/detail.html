@@ -889,8 +889,19 @@ function postComment(){const t=v('mCommentText').trim();if(!t)return;
     fetch(`/api/row/${cur.id}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})})
         .then(r=>r.json()).then(()=>{document.getElementById('mCommentText').value='';loadComments();});}
 function loadHistory(){fetch(`/api/row/${cur.id}/history`).then(r=>r.json()).then(h=>{
-    document.getElementById('mHistory').innerHTML='<div style="border-top:1px solid var(--dark3);padding-top:10px;font-size:12px;">'+
-        (h.length?h.map(x=>`<div style="margin-bottom:6px;"><b style="color:var(--pink-light)">${esc(x.user)}</b> · ${x.action} <span style="color:var(--gray)">${x.at}</span>${x.new?` → <i>${esc(x.new)}</i>`:''}</div>`).join(''):'<span style="color:var(--gray)">No history.</span>')+'</div>';});}
+    const actionLabel={remark:'💬 Remark',approve:'✅ Approved',resolve:'✅ Resolved',reject:'❌ Rejected',
+        reopen:'🔄 Reopened',assign:'👤 Assigned',followup:'📞 Follow-up',table4:'🏷 Table 4',
+        vendor_email:'📧 Email sent',bulk_excel:'💬 Bulk Remark'};
+    document.getElementById('mHistory').innerHTML='<div style="font-size:12px;">'+(h.length?h.map(x=>{
+        const lbl=actionLabel[x.action]||x.action;
+        let detail='';
+        if(x.action==='remark'&&x.new) detail=`<div style="margin-top:4px;padding:6px 8px;background:var(--dark2);border-radius:6px;color:var(--gray-light);font-size:11px;">"${esc(x.new)}"</div>`;
+        else if(x.old&&x.new) detail=`<span style="color:var(--gray)"> ${esc(x.old)} → ${esc(x.new)}</span>`;
+        else if(x.new) detail=`<span style="color:var(--gray)"> → ${esc(x.new)}</span>`;
+        return `<div style="margin-bottom:10px;border-left:2px solid var(--dark3);padding-left:8px;">
+            <b style="color:var(--pink-light)">${esc(x.user)}</b> <span style="color:var(--gray);font-size:10px;">${esc(x.at)}</span><br>
+            <span style="font-size:11px;">${lbl}</span>${detail}</div>`;
+    }).join(''):'<span style="color:var(--gray)">No history yet.</span>')+'</div>';});}
 // vendor drill-down — all rows for a GSTIN across states/months
 let vCurGstin='', vCurRows=[];
 function openVendor(gstin){
