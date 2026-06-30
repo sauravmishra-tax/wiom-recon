@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Server Error · WIOM{% endblock %}
+{% block content %}
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;gap:18px;">
+    <div style="font-size:72px;line-height:1;">⚡</div>
+    <h2 style="font-size:32px;font-weight:800;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">500 — Something Went Wrong</h2>
+    <p style="color:var(--gray-light);font-size:15px;max-width:420px;">An unexpected error occurred on the server. The team has been notified. Please try again in a moment.</p>
+    <div style="display:flex;gap:12px;margin-top:8px;">
+        <a href="{{ url_for('dashboard') }}" class="btn">Go to Dashboard</a>
+        <a href="javascript:location.reload()" class="btn ghost">↻ Retry</a>
+    </div>
+</div>
+{% endblock %}

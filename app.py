@@ -1867,11 +1867,12 @@ def api_breakdown():
 
 
 def _filtered_rows_query():
-    """ReconRow query filtered by period/state/fy/search/category/recon/status args + user's state restriction."""
+    """ReconRow query filtered by period/state/fy/search/gstin/category/recon/status args + user's state restriction."""
     q = ReconRow.query
     period = request.args.get('period')
     state = request.args.get('state')
     search = request.args.get('q', '').strip()
+    gstin_exact = request.args.get('gstin', '').strip()
     category = request.args.get('category')
     recon = request.args.get('recon')
     wf_status = request.args.get('status')
@@ -1880,7 +1881,9 @@ def _filtered_rows_query():
     if state and state != 'all':
         q = q.filter(ReconRow.state_name == state)
     q = _apply_fy(q, request.args.get('fy'))
-    if search:
+    if gstin_exact:
+        q = q.filter(ReconRow.gstin == gstin_exact)
+    elif search:
         like = f'%{search}%'
         q = q.filter(ReconRow.gstin.like(like) | ReconRow.vendor.like(like) |
                      ReconRow.books_inv.like(like) | ReconRow.gstn_inv.like(like))
@@ -1958,8 +1961,65 @@ def gap_from_rows(reconrows):
 @app.route('/api/gap-analysis')
 @login_required
 def api_gap_analysis():
-    """Per-GSTIN gap analysis (Books vs GSTR-2B), mirroring the report sheet."""
-    rows = gap_from_rows(_filtered_rows_query().all())
+    """Per-GSTIN gap analysis using SQL aggregation — no Python-level row loading."""
+    from sqlalchemy import func, case
+    q = _filtered_rows_query()
+    agg = q.with_entities(
+        ReconRow.gstin,
+        func.max(ReconRow.vendor).label('vendor'),
+        func.max(ReconRow.state_name).label('state'),
+        func.sum(case((ReconRow.category.in_(['matched', 'books_only']), 1), else_=0)).label('b_cnt'),
+        func.sum(case((ReconRow.category.in_(['matched', 'books_only']),
+                       func.coalesce(ReconRow.books_taxable, 0)), else_=0)).label('b_taxable'),
+        func.sum(case((ReconRow.category.in_(['matched', 'books_only']),
+                       func.coalesce(ReconRow.books_igst, 0) +
+                       func.coalesce(ReconRow.books_cgst, 0) +
+                       func.coalesce(ReconRow.books_sgst, 0)), else_=0)).label('b_tax'),
+        func.sum(case((ReconRow.category.in_(['matched', 'books_only']),
+                       func.coalesce(ReconRow.books_total, 0)), else_=0)).label('b_total'),
+        func.sum(case((ReconRow.category.in_(['matched', 'gstn_only']), 1), else_=0)).label('g_cnt'),
+        func.sum(case((ReconRow.category.in_(['matched', 'gstn_only']),
+                       func.coalesce(ReconRow.gstn_taxable, 0)), else_=0)).label('g_taxable'),
+        func.sum(case((ReconRow.category.in_(['matched', 'gstn_only']),
+                       func.coalesce(ReconRow.gstn_igst, 0) +
+                       func.coalesce(ReconRow.gstn_cgst, 0) +
+                       func.coalesce(ReconRow.gstn_sgst, 0)), else_=0)).label('g_tax'),
+        func.sum(case((ReconRow.category.in_(['matched', 'gstn_only']),
+                       func.coalesce(ReconRow.gstn_total, 0)), else_=0)).label('g_total'),
+    ).group_by(ReconRow.gstin).all()
+
+    rows = []
+    for a in agg:
+        b_total = float(a.b_total or 0); g_total = float(a.g_total or 0)
+        b_tax = float(a.b_tax or 0);     g_tax = float(a.g_tax or 0)
+        b_taxable = float(a.b_taxable or 0); g_taxable = float(a.g_taxable or 0)
+        total_gap = b_total - g_total
+        if a.b_cnt == 0 and a.g_cnt > 0:
+            risk, remark = 'HIGH', 'Only in GSTR-2B'
+        elif a.b_cnt > 0 and a.g_cnt == 0:
+            risk, remark = 'CRITICAL', 'Only in Books — vendor not filed'
+        elif abs(total_gap) < 1:
+            risk, remark = 'LOW', 'Amount matched'
+        elif abs(total_gap) > 100000:
+            risk, remark = 'HIGH', ('Books > 2B' if total_gap > 0 else '2B > Books')
+        else:
+            risk, remark = 'MEDIUM', ('Books > 2B' if total_gap > 0 else '2B > Books')
+        action = {'CRITICAL': 'URGENT: Vendor follow-up', 'HIGH': 'Investigate',
+                  'LOW': 'Verify invoice nos'}.get(risk, 'Review')
+        denom = max(abs(b_total), abs(g_total))
+        rows.append({
+            'gstin': a.gstin, 'vendor': a.vendor, 'state': a.state,
+            'b_cnt': a.b_cnt, 'b_taxable': round(b_taxable, 2),
+            'b_tax': round(b_tax, 2), 'b_total': round(b_total, 2),
+            'g_cnt': a.g_cnt, 'g_taxable': round(g_taxable, 2),
+            'g_tax': round(g_tax, 2), 'g_total': round(g_total, 2),
+            'taxable_gap': round(b_taxable - g_taxable, 2),
+            'tax_gap': round(b_tax - g_tax, 2),
+            'total_gap': round(total_gap, 2),
+            'gap_pct': round(total_gap / denom, 4) if denom else 0,
+            'risk': risk, 'remark': remark, 'action': action,
+        })
+    rows.sort(key=lambda x: abs(x['total_gap']), reverse=True)
     return jsonify({'rows': rows, 'count': len(rows)})
 
 
@@ -3106,6 +3166,16 @@ def api_gstin_suggest():
 
 
 # ----------------------------------------------------------------------
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(e):
+    db.session.rollback()
+    return render_template('500.html'), 500
+
+
 def _summary_stats(user):
     q = ReconRow.query
     if not user.is_admin and user.state_list():

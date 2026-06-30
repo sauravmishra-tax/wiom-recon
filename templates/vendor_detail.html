@@ -7,6 +7,7 @@
         <div class="sub" id="vendorMeta">GSTIN: {{ gstin }}</div>
     </div>
     <div style="display:flex;gap:10px;">
+        <a id="exportBtn" href="#" class="btn ghost sm">⬇ Export Excel</a>
         <a href="javascript:history.back()" class="btn ghost">← Back</a>
     </div>
 </div>
@@ -61,6 +62,7 @@
 <script>
 const gstin = {{ gstin|tojson }};
 const fmt = n => (n||0).toLocaleString('en-IN',{maximumFractionDigits:0});
+document.getElementById('exportBtn').href = '/export?gstin=' + encodeURIComponent(gstin);
 
 fetch('/api/vendor-rows/' + encodeURIComponent(gstin))
 .then(r=>r.json()).then(d=>{
