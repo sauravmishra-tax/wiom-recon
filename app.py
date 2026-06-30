@@ -1443,6 +1443,8 @@ def api_audit():
         'user': l.user_name, 'action': l.action,
         'gstin': r.gstin if r else '',
         'vendor': r.vendor if r else '',
+        'inv': (r.books_inv or r.gstn_inv or '') if r else '',
+        'txn_type': r.txn_type if r else '',
         'state': r.state_name if r else '',
         'period': r.period if r else '',
         'new': l.new_value, 'old': l.old_value,
