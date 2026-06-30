@@ -566,8 +566,10 @@ function bulk(action){
     if(action==='assign'){body.assignee_id=v('bAssignee');}
     if(action==='resolve')body.note=prompt('Resolution note (optional):')||'';
     if((action!=='remark'&&action!=='assign')&&!confirm(`${sel.size} rows ko "${action}" karein?`))return;
+    const _n=sel.size;
     fetch('/api/rows/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();document.getElementById('bRemark').value='';load();refreshCounts();toast(sel.size+' rows updated ✓');}else toast(d.error||'Failed','error');});
+        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();document.getElementById('bRemark').value='';load();refreshCounts();toast(_n+' rows updated ✓');}else toast(d.error||'Failed','error');})
+        .catch(e=>toast(e.message||'Bulk action failed','error'));
 }
 function bulkTable4(){
     if(!sel.size)return;
@@ -1022,12 +1024,14 @@ function togglePeriodLock(){
     const action=_curLock?'unlock':'lock';
     fetch('/api/lock-by-period',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({period,state,action})})
-    .then(r=>r.json()).then(d=>{
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(d=>{
         if(d.ok){
             toast(action==='lock'?'Period '+period+' locked 🔒':'Period '+period+' unlocked 🔓',action==='lock'?'warn':'success');
             fetch('/api/locked-periods').then(r=>r.json()).then(l=>{_allLocks=l;checkLock();});
         } else toast(d.error||'Failed','error');
-    });
+    })
+    .catch(e=>toast(e.message||'Lock action failed','error'));
 }
 (function(){
     fetch('/api/locked-periods').then(r=>r.json()).then(locks=>{
