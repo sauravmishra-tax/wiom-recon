@@ -70,7 +70,8 @@
             <option value="remarked">Remarked</option><option value="approved">Approved</option>
             <option value="resolved">Resolved</option></select></div>
         <div style="grid-column:span 2;"><label>Search GSTIN / vendor / invoice</label>
-            <input id="fSearch" placeholder="Type & Enter…"></div>
+            <input id="fSearch" placeholder="Type & Enter…" list="gstin-suggest-list" oninput="onSearchInput(this)">
+            <datalist id="gstin-suggest-list"></datalist></div>
         <div><label>&nbsp;</label><button class="btn" onclick="load()">Apply</button></div>
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-top:12px;">
@@ -101,6 +102,17 @@
 </div>
 
 <div class="tabs" id="tabs"></div>
+
+<!-- View Stats Bar -->
+<div id="viewStats" style="display:none;font-size:12px;color:var(--gray-light);margin-bottom:10px;
+    display:none;gap:16px;flex-wrap:wrap;align-items:center;padding:8px 16px;
+    background:var(--dark2);border-radius:10px;border:1px solid var(--dark3);">
+    <span id="vsTotal" style="font-weight:700;color:var(--white);"></span>
+    <span id="vsOpen"></span>
+    <span id="vsRemarked" style="color:var(--blue);"></span>
+    <span id="vsApproved" style="color:var(--green);"></span>
+    <span id="vsRisk" style="color:var(--red);font-weight:700;"></span>
+</div>
 
 <div class="card" style="padding:0;overflow:auto;max-height:68vh;">
     <table id="tbl"><thead id="thead"></thead><tbody id="rows">
@@ -469,6 +481,7 @@ function load(){
         rowsCache={};rows.forEach(r=>rowsCache[r.id]=r);
         renderHead(tab,true);renderRows(tab,rows);
         document.getElementById('count').textContent=rows.length+' rows'+(d.count>=2000?' (server limit 2000 — narrow filters)':'');
+        updateViewStats(rows);
     });
 }
 function loadGap(tab){
@@ -937,7 +950,11 @@ function sendVendorLevelEmail(){
     });
 }
 function v(id){return document.getElementById(id).value;}
-function exportXl(){const q=new URLSearchParams(baseParams());window.location='/export?'+q;}
+function exportXl(){
+    const tab=TABS[activeTab];
+    const q=new URLSearchParams({...baseParams(),status:v('fStatus'),...(tab.gap?{}:(tab.api||{}))});
+    window.location='/export?'+q;
+}
 
 // Bulk Remark Excel download
 function dlBulkTemplate(){
@@ -983,6 +1000,51 @@ function uploadBulkRemarks(input){
     fetch('/api/assignees').then(r=>r.json()).then(us=>{
         sel.innerHTML='<option value="">— assign to —</option><option value="">(unassign)</option>'+
             us.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');});})();
+
+// ── View Stats Bar ──
+function updateViewStats(rows){
+    const vs=document.getElementById('viewStats');
+    if(!rows||!rows.length){vs.style.display='none';return;}
+    let open=0,remarked=0,approved=0,risk=0;
+    rows.forEach(r=>{
+        if(r.status==='open')open++;
+        else if(r.status==='remarked')remarked++;
+        else if(r.status==='approved'||r.status==='resolved')approved++;
+        if(r.category==='books_only')risk+=(r.books_igst||0)+(r.books_cgst||0)+(r.books_sgst||0);
+    });
+    document.getElementById('vsTotal').textContent=rows.length+' rows';
+    document.getElementById('vsOpen').textContent=open?'⏳ '+open+' open':'';
+    document.getElementById('vsRemarked').textContent=remarked?'💬 '+remarked+' remarked':'';
+    document.getElementById('vsApproved').textContent=approved?'✅ '+approved+' done':'';
+    document.getElementById('vsRisk').textContent=risk?'⚠ ITC ₹'+fmt(risk):'';
+    vs.style.display='flex';
+}
+
+// ── GSTIN Autocomplete ──
+function onSearchInput(inp){
+    const q=inp.value.trim();
+    if(q.length<2)return;
+    clearTimeout(inp._st);
+    inp._st=setTimeout(()=>{
+        fetch('/api/gstin-suggest?q='+encodeURIComponent(q)).then(r=>r.json()).then(items=>{
+            const dl=document.getElementById('gstin-suggest-list');
+            dl.innerHTML=items.map(i=>`<option value="${esc(i.gstin)}">${i.name?i.name+' — '+i.gstin:i.gstin}</option>`).join('');
+        }).catch(()=>{});
+    },220);
+}
+
+// ── Keyboard Shortcuts ──
+document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){
+        if(document.getElementById('inlineEdit').style.display!=='none'){closeInlineEdit();return;}
+        if(document.getElementById('modal').classList.contains('show')){closeModal();return;}
+        if(document.getElementById('vmodal').classList.contains('show')){document.getElementById('vmodal').classList.remove('show');return;}
+    }
+    if((e.ctrlKey||e.metaKey)&&e.key==='s'){
+        if(document.getElementById('modal').classList.contains('show')){e.preventDefault();saveRemark();return;}
+        if(document.getElementById('inlineEdit').style.display!=='none'){e.preventDefault();saveInlineEdit();return;}
+    }
+});
 
 // ── Column Visibility ──
 function toggleColPanel(){

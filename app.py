@@ -1859,13 +1859,16 @@ def api_breakdown():
 
 
 def _filtered_rows_query():
-    """ReconRow query filtered by period/state/fy/search args + user's state restriction."""
+    """ReconRow query filtered by period/state/fy/search/category/recon/status args + user's state restriction."""
     q = ReconRow.query
     period = request.args.get('period')
     state = request.args.get('state')
     search = request.args.get('q', '').strip()
+    category = request.args.get('category')
+    recon = request.args.get('recon')
+    wf_status = request.args.get('status')
     if period and period != 'all':
-        q = q.filter(ReconRow.period <= period)  # cumulative: show all months up to selected
+        q = q.filter(ReconRow.period <= period)
     if state and state != 'all':
         q = q.filter(ReconRow.state_name == state)
     q = _apply_fy(q, request.args.get('fy'))
@@ -1873,6 +1876,18 @@ def _filtered_rows_query():
         like = f'%{search}%'
         q = q.filter(ReconRow.gstin.like(like) | ReconRow.vendor.like(like) |
                      ReconRow.books_inv.like(like) | ReconRow.gstn_inv.like(like))
+    # Tab-specific filters (used by filtered export)
+    if recon == 'fully':
+        q = q.filter(ReconRow.category == 'matched', ReconRow.recon_status.like('%Fully Reconciled%'))
+    elif recon == 'cross':
+        q = q.filter(ReconRow.category == 'matched', ~ReconRow.recon_status.like('%Fully Reconciled%'))
+    elif recon == 'rejected':
+        q = q.filter(ReconRow.status == 'rejected')
+    else:
+        if category and category != 'all':
+            q = q.filter(ReconRow.category == category)
+        if wf_status and wf_status not in ('all', ''):
+            q = q.filter(ReconRow.status == wf_status)
     if not current_user.is_admin and current_user.state_list():
         q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
     return q
@@ -3017,9 +3032,15 @@ def api_recent_runs():
 @login_required
 def api_activity():
     logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(25).all()
+    # Batch fetch rows (avoid N+1)
+    row_ids = list({l.row_id for l in logs if l.row_id})
+    rows_by_id = {}
+    if row_ids:
+        for r in ReconRow.query.filter(ReconRow.id.in_(row_ids)).all():
+            rows_by_id[r.id] = r
     result = []
     for l in logs:
-        row = db.session.get(ReconRow, l.row_id) if l.row_id else None
+        row = rows_by_id.get(l.row_id) if l.row_id else None
         result.append({
             'user': l.user_name or '—',
             'action': l.action or '',
@@ -3029,6 +3050,19 @@ def api_activity():
             'at': l.created_at.strftime('%d-%b %H:%M') if l.created_at else ''
         })
     return jsonify(result)
+
+
+@app.route('/api/gstin-suggest')
+@login_required
+def api_gstin_suggest():
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    like = f'%{q}%'
+    results = VendorMaster.query.filter(
+        VendorMaster.gstin.like(like) | VendorMaster.name.like(like)
+    ).limit(10).all()
+    return jsonify([{'gstin': v.gstin, 'name': v.name or ''} for v in results])
 
 
 # ----------------------------------------------------------------------
