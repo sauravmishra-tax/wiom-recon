@@ -1545,7 +1545,7 @@ def api_rows():
     if not current_user.is_admin and current_user.state_list():
         q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
 
-    rows = q.order_by(ReconRow.state_name, ReconRow.gstin).limit(2000).all()
+    rows = q.order_by(ReconRow.state_name, ReconRow.gstin).all()
     # Batch load attachment counts (single query instead of N+1)
     if rows:
         row_ids = [r.id for r in rows]
