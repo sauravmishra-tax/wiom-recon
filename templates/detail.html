@@ -181,8 +181,8 @@
 </div>
 
 <!-- MODAL -->
-<div class="modal-bg" id="modal">
-  <div class="card" style="width:580px;max-height:88vh;overflow:auto;margin:0;">
+<div class="modal-bg" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="card" style="width:580px;max-height:88vh;overflow:auto;margin:0;" onclick="event.stopPropagation()">
     <div style="display:flex;justify-content:space-between;align-items:start;">
         <h2 id="mTitle">Row</h2>
         <span onclick="closeModal()" style="cursor:pointer;color:var(--gray);font-size:24px;line-height:1;">×</span></div>
@@ -299,8 +299,8 @@
 </div>
 
 <!-- VENDOR DRILL-DOWN MODAL -->
-<div class="modal-bg" id="vmodal">
-  <div class="card" style="width:92%;max-width:1140px;max-height:90vh;overflow:auto;margin:0;">
+<div class="modal-bg" id="vmodal" onclick="if(event.target===this)document.getElementById('vmodal').classList.remove('show')">
+  <div class="card" style="width:92%;max-width:1140px;max-height:90vh;overflow:auto;margin:0;" onclick="event.stopPropagation()">
     <div style="display:flex;justify-content:space-between;align-items:start;">
         <h2 id="vTitle">Vendor</h2>
         <div style="display:flex;gap:10px;align-items:center;">
@@ -1100,6 +1100,7 @@ document.addEventListener('keydown',e=>{
         if(document.getElementById('inlineEdit').style.display!=='none'){closeInlineEdit();return;}
         if(document.getElementById('modal').classList.contains('show')){closeModal();return;}
         if(document.getElementById('vmodal').classList.contains('show')){document.getElementById('vmodal').classList.remove('show');return;}
+        if(document.getElementById('colPanel').classList.contains('show')){document.getElementById('colPanel').classList.remove('show');return;}
     }
     if((e.ctrlKey||e.metaKey)&&e.key==='s'){
         if(document.getElementById('modal').classList.contains('show')){e.preventDefault();saveRemark();return;}
