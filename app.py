@@ -2101,17 +2101,6 @@ def export_cumulative():
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
-@app.route('/api/row/<int:row_id>/history')
-@login_required
-def api_history(row_id):
-    logs = AuditLog.query.filter_by(row_id=row_id).order_by(AuditLog.created_at).all()
-    return jsonify([{
-        'user': l.user_name, 'action': l.action, 'field': l.field,
-        'old': l.old_value, 'new': l.new_value,
-        'at': l.created_at.strftime('%d-%b-%Y %H:%M'),
-    } for l in logs])
-
-
 # ---- Feature 8: comment thread per row ----
 @app.route('/api/row/<int:row_id>/comments', methods=['GET', 'POST'])
 @login_required
@@ -2132,7 +2121,7 @@ def api_comments(row_id):
                      'at': c.created_at.strftime('%d-%b-%Y %H:%M')} for c in cs])
 
 
-# ---- Row history (all audit log entries for a row) ----
+# ---- Row history (audit log + comments merged, newest first) ----
 @app.route('/api/row/<int:row_id>/history')
 @login_required
 def api_row_history(row_id):
@@ -2141,15 +2130,31 @@ def api_row_history(row_id):
         abort(404)
     if not current_user.can_see_state(row.state_name):
         abort(403)
-    entries = AuditLog.query.filter_by(row_id=row_id).order_by(AuditLog.created_at.desc()).all()
-    return jsonify([{
-        'user': e.user_name,
-        'action': e.action,
-        'field': e.field,
-        'old': e.old_value,
-        'new': e.new_value,
-        'at': e.created_at.strftime('%d-%b-%Y %H:%M'),
-    } for e in entries])
+    result = []
+    for e in AuditLog.query.filter_by(row_id=row_id).all():
+        result.append({
+            'type': 'audit',
+            'user': e.user_name,
+            'action': e.action,
+            'old': e.old_value,
+            'new': e.new_value,
+            'at': e.created_at.strftime('%d-%b-%Y %H:%M'),
+            '_ts': e.created_at,
+        })
+    for c in RowComment.query.filter_by(row_id=row_id).all():
+        result.append({
+            'type': 'comment',
+            'user': c.user_name,
+            'action': 'comment',
+            'old': '',
+            'new': c.text,
+            'at': c.created_at.strftime('%d-%b-%Y %H:%M'),
+            '_ts': c.created_at,
+        })
+    result.sort(key=lambda x: x['_ts'], reverse=True)
+    for r in result:
+        del r['_ts']
+    return jsonify(result)
 
 
 # ---- Attachments (invoice images, email screenshots, PDFs) ----

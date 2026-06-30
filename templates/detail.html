@@ -895,7 +895,7 @@ function postComment(){const t=v('mCommentText').trim();if(!t)return;
 function loadHistory(){fetch(`/api/row/${cur.id}/history`).then(r=>r.json()).then(h=>{
     const actionLabel={remark:'💬 Remark',approve:'✅ Approved',resolve:'✅ Resolved',reject:'❌ Rejected',
         reopen:'🔄 Reopened',assign:'👤 Assigned',followup:'📞 Follow-up',table4:'🏷 Table 4',
-        vendor_email:'📧 Email sent',bulk_excel:'💬 Bulk Remark'};
+        vendor_email:'📧 Email sent',bulk_excel:'💬 Bulk Remark',comment:'🗨 Discussion Note'};
     document.getElementById('mHistory').innerHTML='<div style="font-size:12px;">'+(h.length?h.map(x=>{
         const lbl=actionLabel[x.action]||x.action;
         let detail='';
