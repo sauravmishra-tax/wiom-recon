@@ -354,92 +354,125 @@
 <script>
 (function(){
 var IS_ADMIN = {{ 'true' if current_user.is_admin else 'false' }};
+var USER_ROLE = '{{ current_user.role }}';
 
-var STEPS = [
+// ── ADMIN / SUPERADMIN STEPS ──────────────────────────────────────────────
+var ADMIN_STEPS = [
   {
-    icon:'👋',
-    title:'WIOM Recon mein Swagat Hai!',
-    desc:'<b>WIOM Recon</b> ek smart GST reconciliation platform hai jo aapki <b>Zoho Books</b> ko <b>GSTR-2B</b> se automatically compare karta hai.<br><br>Ye platform har mahine ke <b>ITC at Risk</b> rows identify karta hai, team ko workflow de ta hai — remark, approval, aur tracking sab ek jagah.<br><br>Ye 2-minute tutorial aapko poora app samjha dega.',
-    tip:'💡 Ye tutorial kabhi bhi <b>?</b> button se navbar mein dobara khol sakte hain.'
+    icon:'👋', role:'admin',
+    title:'Admin Dashboard — Swagat Hai',
+    desc:'Aap <b>Admin</b> hain — aapki zimmedari hai:<br><br><span class="tut-pill pink">1. File Upload</span> — Har mahine Zoho ka reconciliation Excel upload karna<br><span class="tut-pill yellow">2. Team Monitor</span> — Team ke remarks review karna<br><span class="tut-pill green">3. Approve / Reject</span> — Team ke kaam ko validate karna<br><span class="tut-pill blue">4. Period Lock</span> — Month close hone pe data lock karna<br><br>Ye tutorial admin workflow step-by-step bataega.',
+    tip:'💡 Ye tutorial kabhi bhi navbar ke <b>?</b> button se dobara khol sakte hain.'
   },
   {
-    icon:'📊',
-    title:'Dashboard — Pehli Nazar',
-    desc:'Dashboard pe aate hi <b>5 key stats</b> dikhte hain:<br><br><span class="tut-pill red">⚠ ITC at Risk</span> — Books mein hai, 2B mein nahi → ye amount claim nahi hoga unless fix ho.<br><br><span class="tut-pill">📋 Total Rows</span> — Is period ka kul invoice count.<br><br><span class="tut-pill yellow">⏳ Open</span> — Abhi tak koi remark nahi — team ka kaam pending.<br><br><span class="tut-pill blue">💬 Remarked</span> — Team ne remark diya, admin ka approval pending.<br><br><span class="tut-pill green">✅ Approved</span> — Resolved rows.',
-    tip:'💡 ITC at Risk card pe click karo → seedha <b>Books Only tab</b> pe jaoge jahan ye rows hain.'
+    icon:'📊', role:'admin',
+    title:'Dashboard — Puri Picture Ek Nazar Mein',
+    desc:'Dashboard pe aate hi puri company ka status:<br><br><span class="tut-pill red">⚠ ITC at Risk</span> — Kitna ITC claim nahi milega agar fix na hua<br><span class="tut-pill">📋 Total Rows</span> — Kul invoice rows DB mein<br><span class="tut-pill yellow">⏳ Open</span> — Team ne abhi kaam nahi kiya<br><span class="tut-pill blue">💬 Remarked</span> — Team ka kaam done, <b>aapka approval pending</b><br><span class="tut-pill green">✅ Approved</span> — Resolved<br><br>Neecha Activity feed dikhti hai — kaun kya kar raha hai real-time.',
+    tip:'💡 ITC at Risk card pe click → directly Books Only tab. Ye number minimize karna aapka main goal hai.'
   },
   {
-    icon:'📋',
-    title:'Detail & Remarks Page',
-    desc:'Ye app ka main kaam karne wala page hai. Yahan <b>saari invoice rows</b> hain.<br><br><b>Filter karo:</b><br>• Period — specific month ya "All" cumulative<br>• State — Delhi, Haryana, Maharashtra, UP<br>• FY — Financial year ke hisaab se<br>• Status — Open / Remarked / Approved<br>• Search — GSTIN ya Vendor name se<br><br><b>Kisi bhi row pe click karo</b> → right side panel mein details aur remark form khulega.',
-    tip:'💡 Columns hide/show kar sakte ho — table header mein ⚙ icon se. Ye setting browser mein save rehti hai.'
+    icon:'⬆️', role:'admin',
+    title:'Step 1 — New Recon Upload',
+    desc:'Har mahine ka pehla kaam: <b>Navigation → New Recon</b><br><br><b>Process:</b><br>1. <b>State</b> select karo (Delhi / Haryana / Maharashtra / UP)<br>2. <b>Period</b> select karo (return month, e.g. April 2026)<br>3. Zoho Books se download kiya <b>GSTR-2B Reconciliation Excel</b> upload karo<br>4. <b>Start Processing</b> dabao<br>5. <b>9 AI agents</b> ~30 seconds mein file process karte hain<br>6. Done → Detail page pe saari categorized rows aa jaati hain<br><br><b>Note:</b> Har upload ek state ka pura data replace karta hai — cumulative hai.',
+    tip:'💡 Upload ke baad "Processing complete" notification aata hai. Tab tak kuch aur kaam kar sakte ho.'
   },
   {
-    icon:'📑',
-    title:'5 Tabs Ka Matlab',
-    desc:'Detail page pe <b>5 tabs</b> hain, har tab ek category dikhata hai:<br><br><span class="tut-pill red">📚 Books Only</span> — Aapki books mein hai, vendor ne 2B mein file nahi kiya → <b>ITC risk</b><br><br><span class="tut-pill blue">🏛 GSTN Only</span> — 2B mein hai, books mein entry nahi → verify karo<br><br><span class="tut-pill yellow">🔀 Cross Match</span> — Dono jagah hai, amounts mein difference → reconcile karo<br><br><span class="tut-pill green">✅ Fully Reconciled</span> — Bilkul match, ITC safe<br><br><span class="tut-pill">📊 Gap Analysis</span> — Vendor-wise ITC gap ka summary table',
-    tip:'💡 Har tab pe row count badge dikhta hai. <b>Books Only pe focus karo pehle</b> — wahan ITC at risk hai.'
+    icon:'📑', role:'admin',
+    title:'Step 2 — Rows Categories Samjho',
+    desc:'Upload hone ke baad Detail page pe <b>5 tabs</b> bante hain:<br><br><span class="tut-pill red">📚 Books Only</span> — Books mein, 2B mein nahi → <b>ITC at Risk — PRIORITY</b><br><span class="tut-pill blue">🏛 GSTN Only</span> — 2B mein, books mein nahi → verify karo<br><span class="tut-pill yellow">🔀 Cross Match</span> — Dono jagah, amount mismatch → reconcile<br><span class="tut-pill green">✅ Fully Reconciled</span> — Safe, kuch nahi karna<br><span class="tut-pill">📊 Gap Analysis</span> — Vendor-wise ITC gap summary<br><br><b>Aapka kaam:</b> Team ko assign karo ya khud Books Only + Cross Match clear karo.',
+    tip:'💡 Rows kisi team member ko assign kar sakte ho — row click → "Assign to" dropdown.'
   },
   {
-    icon:'📚',
-    title:'Books Only Tab — ITC at Risk',
-    desc:'Ye <b>sabse critical tab</b> hai.<br><br>Yahan wo invoices hain jo <b>aapki Zoho Books mein recorded hain lekin vendor ne GSTR-1 file nahi kiya</b> — isliye GSTR-2B mein nahi aaya.<br><br><b>Kya karna hai:</b><br>• Row pe click karo<br>• Remark daalo — "Vendor ko follow up kiya", "Dispute mein hai", "Credit note expected", etc.<br>• Reason select karo<br>• Submit karo<br><br>Status <span class="tut-pill blue">Remarked</span> ho jaata hai, admin ko approval milta hai.',
-    tip:'💡 Bulk action bhi hai — multiple rows select karo (checkbox) → ek saath remark do.'
+    icon:'👥', role:'admin',
+    title:'Step 3 — Team ko Kaam Assign Karo',
+    desc:'Detail page pe rows team members ko assign kar sakte ho:<br><br>1. Row pe click karo → side panel khulega<br>2. <b>"Assign to"</b> dropdown mein team member select karo<br>3. Save<br><br>Ya bulk mein: <b>Multiple rows select karo → Bulk Assign</b><br><br>Assigned team member ko <b>My Queue</b> mein woh rows dikhenge.<br><br>Agar assign nahi kiya toh bhi team apna state/period filter kake kaam kar sakti hai.',
+    tip:'💡 My Queue mein admin ko "Remarked" rows dikhti hain — ye aapka approval inbox hai.'
   },
   {
-    icon:'🏛️',
-    title:'GSTN Only Tab',
-    desc:'Yahan wo invoices hain jo <b>GSTR-2B mein hain lekin Zoho Books mein entry nahi hai</b>.<br><br>Possible reasons:<br>• Purchase book nahi ki gayi<br>• Wrong vendor ka invoice aa gaya<br>• Advance payment tha<br><br><b>Kya karna hai:</b><br>• <b>Valid purchase hai?</b> → Zoho mein book karo, remark mein note karo<br>• <b>Unknown vendor?</b> → Reject/flag karo remark mein<br>• <b>Already booked?</b> → Invoice number mismatch note karo',
-    tip:'💡 Vendor name pe click karo → us vendor ki saari transactions ek jagah dikhti hain (Vendor Detail page).'
+    icon:'✅', role:'admin',
+    title:'Step 4 — Approval Workflow',
+    desc:'Team jab remark submit karti hai → row <span class="tut-pill blue">Remarked</span> ho jaati hai.<br><br><b>Aapka approval process:</b><br>1. <b>Navigation → My Queue</b> — saare pending remarks<br>2. Row pe click → remark + reason padho<br>3. <b>Approve</b> karo → <span class="tut-pill green">Approved/Resolved</span><br>4. Ya <b>Reject</b> karo with note → row wapas <span class="tut-pill yellow">Open</span><br><br>Rejected rows team ko dobara handle karni padti hain.<br><br><b>ITC Table 4 bucket</b> bhi assign kar sakte ho — GSTR-3B filing ke liye.',
+    tip:'💡 Bulk approve bhi possible hai — multiple Remarked rows select → Bulk Approve.'
   },
   {
-    icon:'🔀',
-    title:'Cross Match Tab',
-    desc:'Yahan wo invoices hain jo <b>dono jagah hain (Books aur 2B mein) lekin amounts mein farq hai</b>.<br><br>Common issues:<br>• <span class="tut-pill red">Tax Head Mismatch</span> — Books mein IGST, 2B mein CGST+SGST (ya ulta)<br>• Amount difference — rounding, credit note, etc.<br>• Invoice number format different<br><br><b>Kya karna hai:</b><br>Row pe click karo → dono sides ka comparison dikhega → remark mein explain karo ya CA ko escalate karo.',
-    tip:'💡 "Diff" column mein amount difference dikhta hai. Negative diff matlab Books mein zyada amount hai.'
+    icon:'🔒', role:'admin',
+    title:'Step 5 — Period Lock Karo',
+    desc:'Jab ek month ka kaam complete ho jaaye:<br><br>1. <b>New Recon page</b> pe jaao<br>2. Us period ke run ke paas <b>🔒 Lock Period</b> button<br>3. Lock karne ke baad us period ki koi bhi row edit nahi ho sakti<br><br><b>Kyun lock karna chahiye?</b><br>• Month close hone ke baad accidental changes rokne ke liye<br>• Audit trail clean rehti hai<br>• CA ko final data confidence ke saath de sakte ho<br><br>Unlock bhi kar sakte ho agar zaroorat pade — sirf admin.',
+    tip:'💡 Locked period ko orange banner dikhta hai Detail page pe — team ko pata rehta hai kaam done hai.'
   },
   {
-    icon:'✍️',
-    title:'Remark Kaise Karte Hain',
-    desc:'Kisi bhi row pe click karo — right side ek <b>detail panel</b> khulega.<br><br><b>Steps:</b><br>1. <b>Remark</b> field mein type karo — kya action liya, vendor se kya baat hui, etc.<br>2. <b>Reason</b> select karo dropdown se (Pending Filing, Disputed, Under Review, etc.)<br>3. <b>Submit Remark</b> button dabao<br><br>Status change:<br><span class="tut-pill yellow">Open</span> → <span class="tut-pill blue">Remarked</span> (admin ke paas approval ke liye)<br><br>Admin approve karta hai → <span class="tut-pill green">Approved</span>',
-    tip:'💡 Comment thread bhi add kar sakte ho — ek row pe multiple team members discuss kar sakte hain.'
-  },
-  {
-    icon:'👤',
-    title:'My Queue — Apna Kaam',
-    desc:'Navigation mein <b>"My Queue"</b> link aapke liye shortcut hai.<br><br>Yahan dikhta hai:<br>• <b>Admin/Accounts ko:</b> Saare "Remarked" rows — team ke remarks jo approval pending hain<br>• <b>Team member ko:</b> Apne assigned rows ya pending open rows<br><br>Ye ek <b>focused view</b> hai — baki saara data filter ho jaata hai, sirf tumhara kaam dikhai deta hai.<br><br>Din ki shuruat yahan se karo — pehle My Queue clear karo.',
-    tip:'💡 Row kisi specific team member ko assign bhi kar sakte hain — row open karo → "Assign to" dropdown.'
-  },
-  {
-    icon:'⬇️',
-    title:'Export — Data Bahar Nikalna',
-    desc:'Kisi bhi tab pe <b>"⬇ Export Excel"</b> button hai (top right).<br><br>Ye current <b>filters ke hisaab se</b> data Excel mein download karta hai:<br>• Sirf Books Only rows chahiye → Books Only tab pe jaao → Export<br>• Specific state ka → State filter lagao → Export<br>• Specific period → Period select karo → Export<br><br>Export file mein team remarks, status, amounts — sab kuch hota hai.',
-    tip:'💡 CFO Summary bhi hai — Dashboard pe "CFO Summary" button. Ek page ka summary report banata hai.'
+    icon:'📝', role:'admin',
+    title:'Step 6 — Audit Log & Reporting',
+    desc:'<b>Audit Log</b> (Navigation) — har action ka record:<br>• Kisne kab remark add kiya<br>• Kab approve/reject hua<br>• Kab file upload hua, kab lock hua<br><br><b>Reports:</b><br>• <b>CFO Summary</b> (Dashboard pe button) — ek page ka executive summary<br>• <b>Scorecard</b> — Vendor-wise filing reliability grades (A+ se D)<br>• <b>Export Excel</b> — Current filter ka data Excel mein<br><br>State filter + Period filter laga ke specific report nikalo.',
+    tip:'💡 Scorecard mein vendors ko grade milta hai — D grade wale vendors ITC risk mein sabse zyada hain.'
   },
 ];
 
-{% if current_user.is_admin %}
-STEPS = STEPS.concat([
+// ── TEAM / USER (Book-Keeping) STEPS ─────────────────────────────────────
+var USER_STEPS = [
   {
-    icon:'⬆️',
-    title:'New Recon — File Upload (Admin)',
-    desc:'Navigation mein <b>"New Recon"</b> button se monthly reconciliation run karo.<br><br><b>Steps:</b><br>1. <b>State</b> select karo (Delhi / Haryana / Maharashtra / UP)<br>2. <b>Period</b> select karo (return ka mahina)<br>3. Zoho Books ka <b>GSTR-2B reconciliation Excel</b> upload karo<br>4. Processing start hoga — <b>9 AI agents</b> run karte hain<br>5. Done hone ke baad Detail page pe saari rows aa jaati hain<br><br>Note: Ye upload <b>cumulative</b> hai — ek state ka purana data replace ho jaata hai naye se.',
-    tip:'💡 Upload fail ho toh error message padho — usually wrong state ya wrong Excel format hota hai.'
+    icon:'👋', role:'user',
+    title:'Team Member — Swagat Hai',
+    desc:'Aap <b>Book-Keeping Team</b> mein hain — aapka kaam hai:<br><br><span class="tut-pill yellow">1. Review</span> — Assigned rows dekhna aur samajhna<br><span class="tut-pill pink">2. Remark</span> — Har row pe kya action liya, vendor se kya baat hui — ye note karna<br><span class="tut-pill blue">3. Follow-up</span> — Vendor ko contact karna filing ke liye<br><span class="tut-pill green">4. Update</span> — Status update karna jab vendor file kare<br><br>Ye tutorial aapka poora workflow explain karega.',
+    tip:'💡 Ye tutorial kabhi bhi navbar ke <b>?</b> button se dobara khol sakte hain.'
   },
   {
-    icon:'✅',
-    title:'Approval Workflow (Admin)',
-    desc:'Team member jab remark deta hai → row ka status <span class="tut-pill blue">Remarked</span> ho jaata hai.<br><br><b>Admin ka kaam:</b><br>1. <b>My Queue</b> mein jaao — saare pending remarks dikhenge<br>2. Row pe click karo<br>3. Remark padho + reason dekho<br>4. <b>Approve</b> karo (ITC safe hai) ya <b>Reject</b> karo with note<br><br>Approved → <span class="tut-pill green">Approved/Resolved</span><br>Rejected → Row wapas <span class="tut-pill yellow">Open</span> mein, team ko re-work karna hoga.',
-    tip:'💡 Period ko <b>Lock</b> bhi kar sakte ho — lock hone ke baad us period ki rows edit nahi hongi. New Recon pe lock option hai.'
+    icon:'📊', role:'user',
+    title:'Dashboard — Apna Overview',
+    desc:'Dashboard pe company ka overall status dikhta hai:<br><br><span class="tut-pill red">⚠ ITC at Risk</span> — Kitna ITC pending hai company-wide<br><span class="tut-pill yellow">⏳ Open</span> — Kitni rows abhi kaam pending hain<br><span class="tut-pill blue">💬 Remarked</span> — Kitni rows admin ke paas approval mein hain<br><br><b>Aapka direct kaam:</b> "Open" rows — inhe remark karna hai.<br><br>Dashboard sirf overview hai. Actual kaam <b>My Queue</b> se start karo.',
+    tip:'💡 Dashboard pe neecha Activity feed bhi hai — team ki recent activity dikhti hai.'
   },
   {
-    icon:'📝',
-    title:'Audit Log (Admin)',
-    desc:'Navigation mein <b>"Audit Log"</b> — har action ka complete record.<br><br>Yahan dikhai deta hai:<br>• Kisne kab koi row edit ki<br>• Kab remark add hua, kab approve hua<br>• Kab file upload hua<br>• Kab period lock/unlock hua<br><br><b>Filter karo</b> period ya state se.<br><br>Agar koi dispute ho — "ye kab approve hua tha?" — Audit Log mein exact timestamp milega.',
-    tip:'💡 Audit Log export nahi hota currently. Screenshot ya Ctrl+A → Excel paste kar sakte ho.'
+    icon:'👤', role:'user',
+    title:'My Queue — Yahan Se Shuru Karo',
+    desc:'Har din ka kaam <b>Navigation → My Queue</b> se start karo.<br><br>Yahan dikhta hai:<br>• Aapko <b>assign ki gayi rows</b><br>• Ya aapke state/period ki <b>Open rows</b><br><br>Ye focused view hai — sirf aapka kaam, baki sab filter out.<br><br><b>Priority:</b> Pehle <span class="tut-pill red">Books Only</span> rows karo — wahan ITC at risk hai.<br>Phir <span class="tut-pill yellow">Cross Match</span>.<br>Phir <span class="tut-pill blue">GSTN Only</span>.',
+    tip:'💡 Agar My Queue khali lagti hai — Detail page pe State aur Period filter check karo.'
   },
-]);
-{% endif %}
+  {
+    icon:'📋', role:'user',
+    title:'Detail Page — Rows Dekhna',
+    desc:'Navigation mein <b>"Detail &amp; Remarks"</b> pe jaao.<br><br><b>Filter karo apne hisaab se:</b><br>• <b>Period</b> — Is mahine ka (ya "All" cumulative)<br>• <b>State</b> — Aapka state (Delhi, Haryana, etc.)<br>• <b>Status</b> — "Open" select karo → sirf kaam wali rows<br><br><b>5 Tabs hain</b> — har tab ek category:<br><span class="tut-pill red">Books Only</span> <span class="tut-pill blue">GSTN Only</span> <span class="tut-pill yellow">Cross Match</span> <span class="tut-pill green">Reconciled</span> <span class="tut-pill">Gap</span><br><br>Kisi bhi row pe click karo → side panel mein details + remark form.',
+    tip:'💡 Search box mein GSTIN ya vendor name type karo → specific vendor ki saari rows filter hongi.'
+  },
+  {
+    icon:'📚', role:'user',
+    title:'Books Only — Sabse Zaroori Tab',
+    desc:'Ye <b>aapka primary kaam</b> hai.<br><br>Yahan wo invoices hain jo <b>Zoho Books mein hain lekin vendor ne GSTR-1 nahi bhara</b> — 2B mein nahi aaya → <b>ITC claim nahi milega</b>.<br><br><b>Aapko kya karna hai:</b><br>• Vendor ko <b>call/email</b> karo — filing karo<br>• Row pe click → remark mein likho: <i>"Called vendor on 28 June, filing by 5 July"</i><br>• Reason select karo: <i>Pending Filing</i><br>• Submit<br><br>Vendor file kare → next month 2B mein aayega → row automatically resolve.',
+    tip:'💡 Multiple rows ek saath handle karne ke liye checkboxes select karo → Bulk Remark.'
+  },
+  {
+    icon:'🏛️', role:'user',
+    title:'GSTN Only Tab',
+    desc:'Ye invoices <b>GSTR-2B mein hain lekin Zoho Books mein nahi</b>.<br><br><b>Aapko check karna hai:</b><br><br><b>Case 1 — Valid purchase hai?</b> → Accountant ko batao Zoho mein book karne ke liye, remark mein note karo<br><br><b>Case 2 — Invoice number alag hai?</b> → Books mein hai but number different → remark mein explain karo<br><br><b>Case 3 — Unknown/Wrong vendor?</b> → Manager ko escalate karo, remark mein flag karo<br><br>Reason: <i>Already Booked / Under Review / Rejected</i>',
+    tip:'💡 Vendor pe click → vendor detail page → us vendor ki saari purani transactions bhi dikhti hain.'
+  },
+  {
+    icon:'🔀', role:'user',
+    title:'Cross Match Tab',
+    desc:'Ye invoices <b>dono jagah hain</b> (Books + 2B) lekin <b>amounts match nahi karti</b>.<br><br>Common cases:<br>• <span class="tut-pill red">Tax Head Mismatch</span> — Books mein IGST, 2B mein CGST+SGST → accountant se check karo<br>• <b>Amount difference</b> — Rounding, credit note, partial payment<br>• <b>Invoice format alag</b> — System ne same invoice ko different samjha<br><br>Row pe click → dono sides ka comparison dikhega → remark mein explain karo exactly kya difference hai aur kyun.',
+    tip:'💡 "Diff" column negative ho toh Books mein zyada amount hai. Positive ho toh 2B mein zyada.'
+  },
+  {
+    icon:'✍️', role:'user',
+    title:'Remark Kaise Karte Hain',
+    desc:'Kisi bhi row pe click karo → right side panel:<br><br><b>1. Remark likho</b> — kya action liya, vendor se kya baat hui, kab follow up hoga<br><i>Example: "Called Raj Trophies on 30 Jun, they will file by 7 Jul"</i><br><br><b>2. Reason select karo</b><br>• <i>Pending Filing</i> — Vendor ne file nahi kiya abhi<br>• <i>Disputed</i> — Invoice mein koi issue hai<br>• <i>Under Review</i> — CA dekh raha hai<br>• <i>Credit Note Expected</i> — Vendor credit dega<br><br><b>3. Submit Remark</b><br><br>Status: <span class="tut-pill yellow">Open</span> → <span class="tut-pill blue">Remarked</span>',
+    tip:'💡 Submit ke baad row admin ke "My Queue" mein chali jaati hai approval ke liye.'
+  },
+  {
+    icon:'💬', role:'user',
+    title:'Comments — Discussion Thread',
+    desc:'Ek row pe team ke saath <b>discuss</b> bhi kar sakte ho.<br><br>Row open karo → neecha <b>Comments section</b> hai:<br>• Question pucho — <i>"Is invoice ki copy vendor ne bheji?"</i><br>• Update do — <i>"Vendor ne file kar di, 2B mein next month aayega"</i><br>• Flag karo — <i>"Manager se guidance chahiye"</i><br><br>Saare comments timestamp ke saath save hote hain.<br>Admin + saare team members comments dekh sakte hain.',
+    tip:'💡 Comment aur Remark alag cheezein hain — Remark = formal status update, Comment = discussion.'
+  },
+  {
+    icon:'⬇️', role:'user',
+    title:'Export — Data Download Karna',
+    desc:'Kisi bhi tab pe <b>"⬇ Export Excel"</b> button hai.<br><br>Current filter ke hisaab se download hoga:<br>• Sirf aapki state → State filter lagao → Export<br>• Sirf Open rows → Status filter = Open → Export<br>• Specific vendor → Search → Export<br><br>Export mein remarks, status, amounts — sab hota hai.<br><br>Iska use: Vendor ko apni pending list bhejna, manager ko status report dena.',
+    tip:'💡 Export se vendor ki pending list nikalo → unhe email ya WhatsApp karo filing ke liye.'
+  },
+];
+
+var STEPS = IS_ADMIN ? ADMIN_STEPS : USER_STEPS;
 
 var cur = 0;
 var seen = [];
