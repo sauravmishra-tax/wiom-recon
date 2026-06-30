@@ -51,7 +51,7 @@
 </div>
 
 <!-- Locked Period Banner -->
-<div id="lockBanner" style="display:none;background:rgba(255,165,0,.12);border:1px solid rgba(255,165,0,.4);border-radius:10px;padding:11px 18px;margin-bottom:14px;color:#ffb347;font-size:13px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+<div id="lockBanner" style="display:none;background:rgba(255,165,0,.12);border:1px solid rgba(255,165,0,.4);border-radius:10px;padding:11px 18px;margin-bottom:14px;color:#ffb347;font-size:13px;align-items:center;gap:12px;flex-wrap:wrap;">
   🔒 <span id="lockBannerText">This period is locked — edits are disabled.</span>
   {% if is_admin %}<button id="lockToggleBtn" class="btn tiny ghost" onclick="togglePeriodLock()" style="margin-left:auto;">🔓 Unlock</button>{% endif %}
 </div>
@@ -853,7 +853,7 @@ function sendVendorEmail(){
 function itcReject(){
     const reason=prompt('Rejection reason (required):\n\nExamples:\n• RCM applicable\n• Ineligible u/s 17(5)\n• Vendor not GST registered\n• Duplicate invoice\n• Personal expense\n• ITC blocked u/r 42/43', '');
     if(reason===null) return;
-    if(!reason.trim()){alert('Reason is required to reject.');return;}
+    if(!reason.trim()){toast('Reason is required to reject.','warn');return;}
     const msg=document.getElementById('mItcMsg');
     msg.style.color='var(--gray-light)'; msg.textContent='Saving…';
     fetch(`/api/row/${cur.id}/itc-action`,{method:'POST',

@@ -20,7 +20,7 @@
 <script>
 function doImport(){
     const f=document.getElementById('file').files[0];
-    if(!f){alert('Choose a CSV file.');return;}
+    if(!f){toast('Choose a CSV file.','warn');return;}
     const fd=new FormData(); fd.append('file',f);
     document.getElementById('msg').textContent='Importing…';
     fetch('/import-remarks',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{

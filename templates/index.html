@@ -629,14 +629,14 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data.error) {
-                        alert(data.error);
+                        toast(data.error,'error');
                         document.getElementById('startBtn').disabled = false;
                         return;
                     }
                     pollInterval = setInterval(pollStatus, 800);
                 })
                 .catch(err => {
-                    alert('Upload failed: ' + err);
+                    toast('Upload failed: ' + err,'error');
                     document.getElementById('startBtn').disabled = false;
                 });
         }

@@ -121,14 +121,14 @@ function startUpload(){
     const period=document.getElementById('period').value;
     const label=document.getElementById('label').value;
     const file=document.getElementById('file').files[0];
-    if(!state){alert('Select the state (Delhi / Haryana / Maharashtra / Uttar Pradesh).');return;}
-    if(!period){alert('Select the return month (GSTR-2B period).');return;}
-    if(!file){alert('Choose an Excel file.');return;}
+    if(!state){toast('Select the state (Delhi / Haryana / Maharashtra / Uttar Pradesh).','warn');return;}
+    if(!period){toast('Select the return month (GSTR-2B period).','warn');return;}
+    if(!file){toast('Choose an Excel file.','warn');return;}
     const fd=new FormData();
     fd.append('file',file); fd.append('label',label); fd.append('state',state); fd.append('period',period);
     document.getElementById('goBtn').disabled=true;
     fetch('/upload',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
-        if(d.error){alert(d.error);document.getElementById('goBtn').disabled=false;return;}
+        if(d.error){toast(d.error,'error');document.getElementById('goBtn').disabled=false;return;}
         document.getElementById('progressCard').style.display='block';
         poll=setInterval(refresh,900); refresh();
     });
@@ -242,9 +242,9 @@ function _zStartFakeProgress(from_period, to_period) {
 function fetchFromZohoBrowser(){
     const from_period = document.getElementById('zFromPeriod').value;
     const to_period   = document.getElementById('zToPeriod').value;
-    if(!from_period){alert('Select From Period first.');return;}
-    if(!to_period){alert('Select To Period first.');return;}
-    if(from_period > to_period){alert('From Period cannot be after To Period.');return;}
+    if(!from_period){toast('Select From Period first.','warn');return;}
+    if(!to_period){toast('Select To Period first.','warn');return;}
+    if(from_period > to_period){toast('From Period cannot be after To Period.','warn');return;}
     const sel = document.getElementById('zStates');
     const states = Array.from(sel.selectedOptions).map(o=>o.value);
     const label  = document.getElementById('zLabel').value.trim();

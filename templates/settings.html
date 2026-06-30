@@ -131,13 +131,13 @@
 <script>
 function fixFullyReconciled(){
     fetch('/settings/fix-fully-reconciled',{method:'POST'}).then(r=>r.json()).then(d=>{
-        alert(d.msg||d.error);
+        toast(d.msg||d.error,d.ok?'success':'error');
     });
 }
 function clearRecon(){
     if(!confirm('This will DELETE all reconciliation rows, runs, comments and audit logs.\nUser accounts, settings and vendor master are kept.\n\nAre you sure?')) return;
     fetch('/settings/clear-recon',{method:'POST'}).then(r=>r.json()).then(d=>{
-        alert(d.msg||d.error);
+        toast(d.msg||d.error,d.ok?'success':'error');
         if(d.ok) location.reload();
     });
 }
