@@ -194,6 +194,75 @@
         .toast.warn{background:linear-gradient(135deg,#FFC542,#d99000);color:#241600;}
         @keyframes toastIn{from{opacity:0;transform:translateX(30px);}to{opacity:1;transform:translateX(0);}}
         @keyframes toastOut{from{opacity:1;}to{opacity:0;transform:translateX(30px);}}
+
+        /* ===== IN-APP TUTORIAL ===== */
+        #tutOverlay{position:fixed;inset:0;z-index:9000;background:rgba(5,5,12,.82);
+            backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:16px;}
+        #tutOverlay.show{display:flex;}
+        #tutCard{background:var(--dark);border:1px solid var(--dark3);border-radius:22px;
+            width:100%;max-width:860px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;
+            box-shadow:0 30px 80px rgba(0,0,0,.6);}
+        #tutProgress{height:3px;background:var(--dark3);}
+        #tutProgressBar{height:100%;background:var(--grad);border-radius:3px;transition:width .35s ease;}
+        #tutBody{display:flex;flex:1;overflow:hidden;min-height:0;}
+        #tutSidebar{width:210px;flex-shrink:0;background:var(--dark2);border-right:1px solid var(--dark3);
+            overflow-y:auto;padding:14px 10px;}
+        .tut-step-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;
+            cursor:pointer;transition:.15s;margin-bottom:2px;}
+        .tut-step-item:hover{background:var(--dark3);}
+        .tut-step-item.active{background:rgba(224,17,157,.15);border:1px solid rgba(224,17,157,.25);}
+        .tut-step-item.done .tut-dot{background:var(--green);color:#fff;}
+        .tut-step-item.active .tut-dot{background:var(--grad);color:#fff;box-shadow:0 2px 8px rgba(224,17,157,.4);}
+        .tut-dot{width:26px;height:26px;border-radius:50%;background:var(--dark3);color:var(--gray);
+            font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+        .tut-step-label{font-size:11.5px;font-weight:600;color:var(--gray-light);line-height:1.3;}
+        .tut-step-item.active .tut-step-label{color:var(--white);}
+        #tutMain{flex:1;overflow-y:auto;padding:32px 36px 24px;display:flex;flex-direction:column;min-width:0;}
+        #tutIcon{font-size:48px;line-height:1;margin-bottom:18px;}
+        #tutTitle{font-size:22px;font-weight:800;font-family:'Sora',sans-serif;margin-bottom:12px;
+            background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+        #tutDesc{font-size:13.5px;color:var(--gray-light);line-height:1.75;flex:1;}
+        #tutDesc b{color:var(--white);}
+        #tutDesc .tut-pill{display:inline-flex;align-items:center;gap:5px;background:var(--dark2);
+            border:1px solid var(--dark3);border-radius:8px;padding:3px 10px;font-size:12px;
+            font-weight:700;color:var(--gray-light);vertical-align:middle;margin:2px 2px;}
+        #tutDesc .tut-pill.pink{background:rgba(224,17,157,.12);border-color:rgba(224,17,157,.25);color:var(--pink-light);}
+        #tutDesc .tut-pill.green{background:rgba(22,199,132,.12);border-color:rgba(22,199,132,.25);color:var(--green);}
+        #tutDesc .tut-pill.blue{background:rgba(59,155,255,.12);border-color:rgba(59,155,255,.25);color:var(--blue);}
+        #tutDesc .tut-pill.yellow{background:rgba(255,197,66,.12);border-color:rgba(255,197,66,.25);color:var(--yellow);}
+        #tutDesc .tut-pill.red{background:rgba(255,77,106,.12);border-color:rgba(255,77,106,.25);color:var(--red);}
+        #tutTip{margin-top:18px;background:var(--dark2);border:1px solid var(--dark3);border-radius:12px;
+            padding:12px 16px;font-size:12px;color:var(--gray-light);line-height:1.6;display:none;}
+        #tutTip b{color:var(--white);}
+        #tutTip.show{display:block;}
+        #tutFooter{padding:16px 28px;border-top:1px solid var(--dark3);display:flex;
+            align-items:center;justify-content:space-between;flex-shrink:0;gap:12px;}
+        #tutDots{display:flex;gap:6px;align-items:center;}
+        .tut-d{width:7px;height:7px;border-radius:50%;background:var(--dark3);transition:.2s;}
+        .tut-d.active{background:var(--pink);width:18px;border-radius:4px;}
+        .tut-d.done{background:var(--green);}
+        #tutFooterBtns{display:flex;gap:10px;}
+        .tut-btn{padding:9px 20px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;
+            font-family:inherit;border:none;transition:.15s;}
+        #tutSkip{background:none;color:var(--gray);font-size:12px;font-weight:600;cursor:pointer;
+            border:none;font-family:inherit;padding:0;}
+        #tutSkip:hover{color:var(--gray-light);}
+        #tutPrev{background:var(--dark2);color:var(--gray-light);border:1px solid var(--dark3);}
+        #tutPrev:hover{background:var(--dark3);color:var(--white);}
+        #tutNext{background:var(--grad);color:#fff;box-shadow:0 4px 14px rgba(224,17,157,.28);}
+        #tutNext:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(224,17,157,.4);}
+        #tutHelpBtn{background:rgba(255,255,255,.12);border:none;color:#fff;width:36px;height:36px;
+            border-radius:10px;cursor:pointer;font-size:15px;font-weight:800;font-family:inherit;
+            display:flex;align-items:center;justify-content:center;transition:.15s;margin-left:4px;
+            flex-shrink:0;}
+        #tutHelpBtn:hover{background:rgba(255,255,255,.22);transform:translateY(-1px);}
+        @media(max-width:640px){
+            #tutSidebar{display:none;}
+            #tutMain{padding:22px 20px 18px;}
+            #tutCard{max-height:95vh;}
+        }
+        @keyframes tutFadeIn{from{opacity:0;transform:scale(.96);}to{opacity:1;transform:scale(1);}}
+        #tutCard{animation:tutFadeIn .22s ease;}
     </style>
     {% block head %}{% endblock %}
 </head>
@@ -217,6 +286,7 @@
             <a href="{{ url_for('auth.users') }}" class="navlink {{ 'active' if request.endpoint=='auth.users' }}">Team</a>
             <a href="{{ url_for('settings_page') }}" class="navlink {{ 'active' if request.endpoint=='settings_page' }}">Settings</a>
             {% endif %}
+            <button id="tutHelpBtn" onclick="openTutorial()" title="App Tutorial — Help">?</button>
             <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle light / dark" aria-label="Toggle theme"></button>
             <div class="user-chip">
                 <div class="u-avatar" id="userAvatar" title="{{ current_user.name }}"></div>
@@ -255,5 +325,213 @@
             var el=document.getElementById('userAvatar');if(el){el.style.background=bg;el.textContent=ini;}})();
     </script>
     {% block scripts %}{% endblock %}
+
+{% if current_user.is_authenticated %}
+<!-- ===== IN-APP TUTORIAL ===== -->
+<div id="tutOverlay" role="dialog" aria-modal="true" aria-label="App Tutorial">
+  <div id="tutCard">
+    <div id="tutProgress"><div id="tutProgressBar"></div></div>
+    <div id="tutBody">
+      <div id="tutSidebar" id="tutSidebarList"></div>
+      <div id="tutMain">
+        <div id="tutIcon"></div>
+        <div id="tutTitle"></div>
+        <div id="tutDesc"></div>
+        <div id="tutTip"></div>
+      </div>
+    </div>
+    <div id="tutFooter">
+      <button id="tutSkip" onclick="closeTutorial()">Skip tutorial</button>
+      <div id="tutDots"></div>
+      <div id="tutFooterBtns">
+        <button class="tut-btn" id="tutPrev" onclick="tutNav(-1)">← Back</button>
+        <button class="tut-btn" id="tutNext" onclick="tutNav(1)">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+var IS_ADMIN = {{ 'true' if current_user.is_admin else 'false' }};
+
+var STEPS = [
+  {
+    icon:'👋',
+    title:'WIOM Recon mein Swagat Hai!',
+    desc:'<b>WIOM Recon</b> ek smart GST reconciliation platform hai jo aapki <b>Zoho Books</b> ko <b>GSTR-2B</b> se automatically compare karta hai.<br><br>Ye platform har mahine ke <b>ITC at Risk</b> rows identify karta hai, team ko workflow de ta hai — remark, approval, aur tracking sab ek jagah.<br><br>Ye 2-minute tutorial aapko poora app samjha dega.',
+    tip:'💡 Ye tutorial kabhi bhi <b>?</b> button se navbar mein dobara khol sakte hain.'
+  },
+  {
+    icon:'📊',
+    title:'Dashboard — Pehli Nazar',
+    desc:'Dashboard pe aate hi <b>5 key stats</b> dikhte hain:<br><br><span class="tut-pill red">⚠ ITC at Risk</span> — Books mein hai, 2B mein nahi → ye amount claim nahi hoga unless fix ho.<br><br><span class="tut-pill">📋 Total Rows</span> — Is period ka kul invoice count.<br><br><span class="tut-pill yellow">⏳ Open</span> — Abhi tak koi remark nahi — team ka kaam pending.<br><br><span class="tut-pill blue">💬 Remarked</span> — Team ne remark diya, admin ka approval pending.<br><br><span class="tut-pill green">✅ Approved</span> — Resolved rows.',
+    tip:'💡 ITC at Risk card pe click karo → seedha <b>Books Only tab</b> pe jaoge jahan ye rows hain.'
+  },
+  {
+    icon:'📋',
+    title:'Detail & Remarks Page',
+    desc:'Ye app ka main kaam karne wala page hai. Yahan <b>saari invoice rows</b> hain.<br><br><b>Filter karo:</b><br>• Period — specific month ya "All" cumulative<br>• State — Delhi, Haryana, Maharashtra, UP<br>• FY — Financial year ke hisaab se<br>• Status — Open / Remarked / Approved<br>• Search — GSTIN ya Vendor name se<br><br><b>Kisi bhi row pe click karo</b> → right side panel mein details aur remark form khulega.',
+    tip:'💡 Columns hide/show kar sakte ho — table header mein ⚙ icon se. Ye setting browser mein save rehti hai.'
+  },
+  {
+    icon:'📑',
+    title:'5 Tabs Ka Matlab',
+    desc:'Detail page pe <b>5 tabs</b> hain, har tab ek category dikhata hai:<br><br><span class="tut-pill red">📚 Books Only</span> — Aapki books mein hai, vendor ne 2B mein file nahi kiya → <b>ITC risk</b><br><br><span class="tut-pill blue">🏛 GSTN Only</span> — 2B mein hai, books mein entry nahi → verify karo<br><br><span class="tut-pill yellow">🔀 Cross Match</span> — Dono jagah hai, amounts mein difference → reconcile karo<br><br><span class="tut-pill green">✅ Fully Reconciled</span> — Bilkul match, ITC safe<br><br><span class="tut-pill">📊 Gap Analysis</span> — Vendor-wise ITC gap ka summary table',
+    tip:'💡 Har tab pe row count badge dikhta hai. <b>Books Only pe focus karo pehle</b> — wahan ITC at risk hai.'
+  },
+  {
+    icon:'📚',
+    title:'Books Only Tab — ITC at Risk',
+    desc:'Ye <b>sabse critical tab</b> hai.<br><br>Yahan wo invoices hain jo <b>aapki Zoho Books mein recorded hain lekin vendor ne GSTR-1 file nahi kiya</b> — isliye GSTR-2B mein nahi aaya.<br><br><b>Kya karna hai:</b><br>• Row pe click karo<br>• Remark daalo — "Vendor ko follow up kiya", "Dispute mein hai", "Credit note expected", etc.<br>• Reason select karo<br>• Submit karo<br><br>Status <span class="tut-pill blue">Remarked</span> ho jaata hai, admin ko approval milta hai.',
+    tip:'💡 Bulk action bhi hai — multiple rows select karo (checkbox) → ek saath remark do.'
+  },
+  {
+    icon:'🏛️',
+    title:'GSTN Only Tab',
+    desc:'Yahan wo invoices hain jo <b>GSTR-2B mein hain lekin Zoho Books mein entry nahi hai</b>.<br><br>Possible reasons:<br>• Purchase book nahi ki gayi<br>• Wrong vendor ka invoice aa gaya<br>• Advance payment tha<br><br><b>Kya karna hai:</b><br>• <b>Valid purchase hai?</b> → Zoho mein book karo, remark mein note karo<br>• <b>Unknown vendor?</b> → Reject/flag karo remark mein<br>• <b>Already booked?</b> → Invoice number mismatch note karo',
+    tip:'💡 Vendor name pe click karo → us vendor ki saari transactions ek jagah dikhti hain (Vendor Detail page).'
+  },
+  {
+    icon:'🔀',
+    title:'Cross Match Tab',
+    desc:'Yahan wo invoices hain jo <b>dono jagah hain (Books aur 2B mein) lekin amounts mein farq hai</b>.<br><br>Common issues:<br>• <span class="tut-pill red">Tax Head Mismatch</span> — Books mein IGST, 2B mein CGST+SGST (ya ulta)<br>• Amount difference — rounding, credit note, etc.<br>• Invoice number format different<br><br><b>Kya karna hai:</b><br>Row pe click karo → dono sides ka comparison dikhega → remark mein explain karo ya CA ko escalate karo.',
+    tip:'💡 "Diff" column mein amount difference dikhta hai. Negative diff matlab Books mein zyada amount hai.'
+  },
+  {
+    icon:'✍️',
+    title:'Remark Kaise Karte Hain',
+    desc:'Kisi bhi row pe click karo — right side ek <b>detail panel</b> khulega.<br><br><b>Steps:</b><br>1. <b>Remark</b> field mein type karo — kya action liya, vendor se kya baat hui, etc.<br>2. <b>Reason</b> select karo dropdown se (Pending Filing, Disputed, Under Review, etc.)<br>3. <b>Submit Remark</b> button dabao<br><br>Status change:<br><span class="tut-pill yellow">Open</span> → <span class="tut-pill blue">Remarked</span> (admin ke paas approval ke liye)<br><br>Admin approve karta hai → <span class="tut-pill green">Approved</span>',
+    tip:'💡 Comment thread bhi add kar sakte ho — ek row pe multiple team members discuss kar sakte hain.'
+  },
+  {
+    icon:'👤',
+    title:'My Queue — Apna Kaam',
+    desc:'Navigation mein <b>"My Queue"</b> link aapke liye shortcut hai.<br><br>Yahan dikhta hai:<br>• <b>Admin/Accounts ko:</b> Saare "Remarked" rows — team ke remarks jo approval pending hain<br>• <b>Team member ko:</b> Apne assigned rows ya pending open rows<br><br>Ye ek <b>focused view</b> hai — baki saara data filter ho jaata hai, sirf tumhara kaam dikhai deta hai.<br><br>Din ki shuruat yahan se karo — pehle My Queue clear karo.',
+    tip:'💡 Row kisi specific team member ko assign bhi kar sakte hain — row open karo → "Assign to" dropdown.'
+  },
+  {
+    icon:'⬇️',
+    title:'Export — Data Bahar Nikalna',
+    desc:'Kisi bhi tab pe <b>"⬇ Export Excel"</b> button hai (top right).<br><br>Ye current <b>filters ke hisaab se</b> data Excel mein download karta hai:<br>• Sirf Books Only rows chahiye → Books Only tab pe jaao → Export<br>• Specific state ka → State filter lagao → Export<br>• Specific period → Period select karo → Export<br><br>Export file mein team remarks, status, amounts — sab kuch hota hai.',
+    tip:'💡 CFO Summary bhi hai — Dashboard pe "CFO Summary" button. Ek page ka summary report banata hai.'
+  },
+];
+
+{% if current_user.is_admin %}
+STEPS = STEPS.concat([
+  {
+    icon:'⬆️',
+    title:'New Recon — File Upload (Admin)',
+    desc:'Navigation mein <b>"New Recon"</b> button se monthly reconciliation run karo.<br><br><b>Steps:</b><br>1. <b>State</b> select karo (Delhi / Haryana / Maharashtra / UP)<br>2. <b>Period</b> select karo (return ka mahina)<br>3. Zoho Books ka <b>GSTR-2B reconciliation Excel</b> upload karo<br>4. Processing start hoga — <b>9 AI agents</b> run karte hain<br>5. Done hone ke baad Detail page pe saari rows aa jaati hain<br><br>Note: Ye upload <b>cumulative</b> hai — ek state ka purana data replace ho jaata hai naye se.',
+    tip:'💡 Upload fail ho toh error message padho — usually wrong state ya wrong Excel format hota hai.'
+  },
+  {
+    icon:'✅',
+    title:'Approval Workflow (Admin)',
+    desc:'Team member jab remark deta hai → row ka status <span class="tut-pill blue">Remarked</span> ho jaata hai.<br><br><b>Admin ka kaam:</b><br>1. <b>My Queue</b> mein jaao — saare pending remarks dikhenge<br>2. Row pe click karo<br>3. Remark padho + reason dekho<br>4. <b>Approve</b> karo (ITC safe hai) ya <b>Reject</b> karo with note<br><br>Approved → <span class="tut-pill green">Approved/Resolved</span><br>Rejected → Row wapas <span class="tut-pill yellow">Open</span> mein, team ko re-work karna hoga.',
+    tip:'💡 Period ko <b>Lock</b> bhi kar sakte ho — lock hone ke baad us period ki rows edit nahi hongi. New Recon pe lock option hai.'
+  },
+  {
+    icon:'📝',
+    title:'Audit Log (Admin)',
+    desc:'Navigation mein <b>"Audit Log"</b> — har action ka complete record.<br><br>Yahan dikhai deta hai:<br>• Kisne kab koi row edit ki<br>• Kab remark add hua, kab approve hua<br>• Kab file upload hua<br>• Kab period lock/unlock hua<br><br><b>Filter karo</b> period ya state se.<br><br>Agar koi dispute ho — "ye kab approve hua tha?" — Audit Log mein exact timestamp milega.',
+    tip:'💡 Audit Log export nahi hota currently. Screenshot ya Ctrl+A → Excel paste kar sakte ho.'
+  },
+]);
+{% endif %}
+
+var cur = 0;
+var seen = [];
+
+function buildSidebar(){
+  var sb = document.getElementById('tutSidebar');
+  sb.innerHTML = '';
+  STEPS.forEach(function(s,i){
+    var div = document.createElement('div');
+    div.className = 'tut-step-item' + (i===cur?' active':'') + (seen.indexOf(i)>=0&&i!==cur?' done':'');
+    div.onclick = (function(idx){return function(){goTo(idx);};})(i);
+    div.innerHTML = '<div class="tut-dot">'+(seen.indexOf(i)>=0&&i!==cur?'✓':(i+1))+'</div>'
+      +'<div class="tut-step-label">'+s.title+'</div>';
+    sb.appendChild(div);
+  });
+}
+
+function renderStep(){
+  var s = STEPS[cur];
+  document.getElementById('tutIcon').textContent = s.icon;
+  document.getElementById('tutTitle').textContent = s.title;
+  document.getElementById('tutDesc').innerHTML = s.desc;
+  var tip = document.getElementById('tutTip');
+  if(s.tip){tip.innerHTML=s.tip;tip.classList.add('show');}else{tip.classList.remove('show');}
+  // progress bar
+  document.getElementById('tutProgressBar').style.width = ((cur+1)/STEPS.length*100)+'%';
+  // dots
+  var dots = document.getElementById('tutDots');
+  var max = Math.min(STEPS.length,12);
+  dots.innerHTML='';
+  for(var i=0;i<max;i++){
+    var d=document.createElement('div');
+    d.className='tut-d'+(i===cur?' active':(seen.indexOf(i)>=0?' done':''));
+    dots.appendChild(d);
+  }
+  // prev button
+  document.getElementById('tutPrev').style.display = cur===0?'none':'';
+  // next button
+  var nb = document.getElementById('tutNext');
+  nb.textContent = cur===STEPS.length-1?'Shuru Karein 🚀':'Next →';
+  // skip link
+  document.getElementById('tutSkip').textContent = cur===STEPS.length-1?'':'Skip tutorial';
+  document.getElementById('tutSkip').style.visibility = cur===STEPS.length-1?'hidden':'visible';
+  // sidebar
+  buildSidebar();
+}
+
+function goTo(idx){
+  if(seen.indexOf(cur)<0) seen.push(cur);
+  cur=idx;
+  renderStep();
+}
+
+function tutNav(dir){
+  if(seen.indexOf(cur)<0) seen.push(cur);
+  if(dir===1 && cur===STEPS.length-1){closeTutorial(true);return;}
+  cur = Math.max(0, Math.min(STEPS.length-1, cur+dir));
+  renderStep();
+}
+
+function openTutorial(fresh){
+  cur = fresh?0:cur;
+  seen = [];
+  document.getElementById('tutOverlay').classList.add('show');
+  renderStep();
+}
+
+function closeTutorial(completed){
+  document.getElementById('tutOverlay').classList.remove('show');
+  try{localStorage.setItem('wiom_tut_v2','done');}catch(e){}
+  if(completed) toast('Tutorial complete! Kisi bhi waqt <b>?</b> button se dobara dekho.','success',4000);
+}
+
+// Keyboard support
+document.addEventListener('keydown',function(e){
+  var ov=document.getElementById('tutOverlay');
+  if(!ov.classList.contains('show'))return;
+  if(e.key==='ArrowRight'||e.key==='Enter') tutNav(1);
+  if(e.key==='ArrowLeft') tutNav(-1);
+  if(e.key==='Escape') closeTutorial();
+});
+
+// Auto-show on first visit
+(function(){
+  try{
+    if(!localStorage.getItem('wiom_tut_v2')){
+      setTimeout(function(){openTutorial(true);},600);
+    }
+  }catch(e){}
+})();
+})();
+</script>
+{% endif %}
 </body>
 </html>
