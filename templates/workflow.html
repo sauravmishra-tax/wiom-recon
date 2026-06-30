@@ -20,15 +20,16 @@
 
 /* Lane body grid */
 .wf-row{display:grid;grid-template-columns:1fr 1fr 1fr;}
-.wf-col{border-right:1px solid var(--dark3);padding:16px;}
+.wf-col{border-right:1px solid var(--dark3);padding:20px 16px 16px;vertical-align:top;}
 .wf-col:last-child{border-right:none;}
 
 /* Step cards */
 .wf-step{background:var(--dark2);border:1px solid var(--dark3);border-radius:14px;
-    padding:14px 16px;position:relative;transition:.15s;height:100%;}
+    padding:14px 16px;transition:.15s;}
 .wf-step:hover{transform:translateY(-1px);border-color:var(--gray);}
-.wf-step-num{position:absolute;top:-10px;left:14px;font-size:9px;font-weight:800;
-    letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:20px;}
+.wf-step-num{display:inline-flex;align-items:center;font-size:9px;font-weight:800;
+    letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:20px;
+    margin-bottom:10px;}
 .wf-icon{font-size:22px;margin-bottom:9px;line-height:1;}
 .wf-step-title{font-size:13px;font-weight:700;margin-bottom:5px;line-height:1.35;}
 .wf-step-desc{font-size:11.5px;color:var(--gray-light);line-height:1.65;}
