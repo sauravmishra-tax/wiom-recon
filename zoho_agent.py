@@ -193,7 +193,7 @@ def run_agent(from_period: str, to_period: str, states: list, headless: bool = F
 
         # Wait for download
         try:
-            with page.expect_download(timeout=30000) as dl_info:
+            with page.expect_download(timeout=90000) as dl_info:
                 if not export_clicked:
                     # Try one more time with Excel option
                     try:

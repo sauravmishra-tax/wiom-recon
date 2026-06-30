@@ -740,6 +740,7 @@ function loadActivity(){
     }).catch(()=>{document.getElementById('activityFeed').innerHTML='<span style="color:var(--gray)">Activity unavailable.</span>';});
 }
 loadActivity();
+setInterval(loadActivity, 5*60*1000);
 
 // State-wise ITC Trend Chart
 fetch('/api/trend/by-state?months=6').then(r=>r.json()).then(d=>{

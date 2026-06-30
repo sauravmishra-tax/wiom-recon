@@ -2011,7 +2011,11 @@ def export_cumulative():
     state = request.args.get('state')
     scope = (state if state and state != 'all' else 'All states') + ' · cumulative to date'
     bio = export_excel.build_cumulative_excel(rows, gap, scope)
-    fname = f"WIOM_Cumulative_{(state or 'AllStates').replace(' ', '')}_{now_ist().strftime('%Y%m%d')}.xlsx"
+    recon = request.args.get('recon', '')
+    category = request.args.get('category', '')
+    tab_map = {'fully': 'FullyRecon', 'cross': 'CrossMatch', 'rejected': 'Rejected'}
+    tab_label = tab_map.get(recon, '') or ('BooksOnly' if category == 'books' else '')
+    fname = f"WIOM_{(tab_label+'_') if tab_label else 'Cumulative_'}{(state or 'AllStates').replace(' ', '')}_{now_ist().strftime('%Y%m%d')}.xlsx"
     return send_file(bio, as_attachment=True, download_name=fname,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
@@ -2145,6 +2149,29 @@ def api_lock_run(run_id):
     run.locked_at = now_ist() if lock else None
     db.session.commit()
     return jsonify({'ok': True, 'locked': run.locked})
+
+
+@app.route('/api/lock-by-period', methods=['POST'])
+@admin_required
+def api_lock_by_period():
+    data = request.get_json() or {}
+    period = data.get('period', '')
+    state = data.get('state', '')
+    action = data.get('action', 'lock')
+    if not period or period == 'all':
+        return jsonify({'ok': False, 'error': 'Select a specific period'}), 400
+    q = ReconRun.query.filter(ReconRun.period == period, ReconRun.archived != True)
+    if state and state != 'all':
+        q = q.filter(ReconRun.state == state)
+    runs = q.all()
+    if not runs:
+        return jsonify({'ok': False, 'error': 'No runs found for this period'}), 404
+    for run in runs:
+        run.locked = (action == 'lock')
+        run.locked_by_id = current_user.id if action == 'lock' else None
+        run.locked_at = now_ist() if action == 'lock' else None
+    db.session.commit()
+    return jsonify({'ok': True, 'locked': action == 'lock', 'count': len(runs)})
 
 
 # ---- Feature 10: vendor follow-up (Book-Keeping shoots mail; everyone sees tracking) ----

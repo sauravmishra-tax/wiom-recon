@@ -37,6 +37,7 @@
         <a class="btn ghost" href="{{ url_for('import_remarks') }}">⬆ Import CSV</a>
         <button class="btn ghost" onclick="dlBulkTemplate()" title="Download Excel template, fill NEW_REMARK column, re-upload">⬇ Bulk Remark Template</button>
         <label class="btn ghost" style="cursor:pointer;" title="Upload filled bulk remark Excel">⬆ Bulk Remark Upload<input type="file" accept=".xlsx" style="display:none" onchange="uploadBulkRemarks(this)"></label>
+        {% if is_admin %}<button id="adminLockBtn" class="btn sm ghost" onclick="togglePeriodLock()" style="display:none;">🔒 Lock Period</button>{% endif %}
         <button class="btn" onclick="exportXl()">⬇ Cumulative Excel</button>
         <div id="colPanelWrap">
             <button class="btn ghost sm" onclick="toggleColPanel()" title="Show/hide columns">⚙ Columns</button>
@@ -50,8 +51,9 @@
 </div>
 
 <!-- Locked Period Banner -->
-<div id="lockBanner" style="display:none;background:rgba(255,165,0,.12);border:1px solid rgba(255,165,0,.4);border-radius:10px;padding:11px 18px;margin-bottom:14px;color:#ffb347;font-size:13px;">
+<div id="lockBanner" style="display:none;background:rgba(255,165,0,.12);border:1px solid rgba(255,165,0,.4);border-radius:10px;padding:11px 18px;margin-bottom:14px;color:#ffb347;font-size:13px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
   🔒 <span id="lockBannerText">This period is locked — edits are disabled.</span>
+  {% if is_admin %}<button id="lockToggleBtn" class="btn tiny ghost" onclick="togglePeriodLock()" style="margin-left:auto;">🔓 Unlock</button>{% endif %}
 </div>
 
 <div class="card" style="padding:16px;">
@@ -400,7 +402,7 @@ const TABS = {
     {k:'gap_pct',h:'Gap%',t:'p'},{k:'risk',h:'Risk',t:'risk'},{k:'remark',h:'Remark'},{k:'action',h:'Action'}]},
 };
 let activeTab='cross', rowsCache={}, sel=new Set(), cur=null;
-let hiddenCols=new Set(JSON.parse(localStorage.getItem('wiom_hidden_cross')||'[]'));
+let hiddenCols=new Set();
 let _ieRowId=null;
 const ALL_PERIODS = {{ periods|tojson }};
 function fyOf(p){const y=+p.slice(0,4),m=+p.slice(5,7);return m>=4?y:y-1;}
@@ -433,6 +435,7 @@ function repopulatePeriods(){
 function onFyChange(){repopulatePeriods();reloadAll();}
 const params=new URLSearchParams(location.search);
 if(params.get('tab') && TABS[params.get('tab')]) activeTab=params.get('tab');
+hiddenCols=new Set(JSON.parse(localStorage.getItem('wiom_hidden_'+activeTab)||'[]'));
 // FY defaults to the current FY (server-selected). If a specific period is requested,
 // align the FY to it so they don't contradict.
 if(params.get('period')) document.getElementById('fFy').value=String(fyOf(params.get('period')));
@@ -495,6 +498,7 @@ function loadGap(tab){
         tb.innerHTML=d.rows.length?d.rows.map((r,i)=>'<tr>'+'<td class="num">'+(i+1)+'</td>'+ident(r)+
             tab.cols.filter(c=>!hiddenCols.has(c.k||c.t)).map(c=>cell(r,c)).join('')+'</tr>').join(''):empty(tab);
         document.getElementById('count').textContent=d.count+' GSTINs';
+        updateViewStats([]);
     });
 }
 function renderHead(tab,sel){
@@ -549,29 +553,29 @@ function updateBulk(){document.getElementById('selN').textContent=sel.size;docum
 function bulk(action){
     if(!sel.size)return;
     const body={ids:[...sel],action};
-    if(action==='remark'){body.remark=v('bRemark');body.reason=v('bReason');if(!body.remark&&!body.reason){alert('Reason ya remark daalo.');return;}}
+    if(action==='remark'){body.remark=v('bRemark');body.reason=v('bReason');if(!body.remark&&!body.reason){toast('Reason ya remark daalo.','warn');return;}}
     if(action==='assign'){body.assignee_id=v('bAssignee');}
     if(action==='resolve')body.note=prompt('Resolution note (optional):')||'';
     if((action!=='remark'&&action!=='assign')&&!confirm(`${sel.size} rows ko "${action}" karein?`))return;
     fetch('/api/rows/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();document.getElementById('bRemark').value='';load();refreshCounts();}else alert(d.error||'Failed');});
+        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();document.getElementById('bRemark').value='';load();refreshCounts();toast(sel.size+' rows updated ✓');}else toast(d.error||'Failed','error');});
 }
 function bulkTable4(){
     if(!sel.size)return;
     const val=document.getElementById('bTable4').value;
-    if(!val){alert('Pehle 3B Table 4 select karo.');return;}
+    if(!val){toast('Pehle 3B Table 4 select karo.','warn');return;}
     fetch('/api/rows/bulk',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ids:[...sel],action:'table4',table4:val})})
-        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();load();}else alert(d.error||'Failed');});
+        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();load();toast('Table 4 updated ✓');}else toast(d.error||'Failed','error');});
 }
 function bulkReject(){
     if(!sel.size)return;
     const reason=prompt(`${sel.size} row(s) ITC Ineligible reject karna chahte ho?\n\nReason daalo (required):\n• RCM applicable\n• Ineligible u/s 17(5)\n• Vendor not GST registered\n• Duplicate invoice\n• Personal expense`,'');
     if(reason===null)return;
-    if(!reason.trim()){alert('Reason required.');return;}
+    if(!reason.trim()){toast('Reason required.','warn');return;}
     fetch('/api/rows/bulk',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ids:[...sel],action:'reject',reason:reason.trim()})})
-        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();load();refreshCounts();}else alert(d.error||'Failed');});
+        .then(r=>r.json()).then(d=>{if(d.ok){clearSel();load();refreshCounts();toast(sel.size+' rows rejected');}else toast(d.error||'Failed','error');});
 }
 
 // single-row modal
@@ -628,10 +632,10 @@ function saveTable4(){
     });
 }
 function saveRemark(){fetch(`/api/row/${cur.id}/remark`,{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({remark:v('mRemark'),reason:v('mReason')})}).then(r=>r.json()).then(d=>{if(d.ok){closeModal();load();refreshCounts();}});}
+    body:JSON.stringify({remark:v('mRemark'),reason:v('mReason')})}).then(r=>r.json()).then(d=>{if(d.ok){closeModal();load();refreshCounts();toast('Remark saved ✓');}else toast(d.error||'Save failed','error');});}
 function single(action){const note=action==='resolve'?prompt('Resolution note (optional):')||'':'';
     fetch(`/api/row/${cur.id}/approve`,{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({action,note})}).then(r=>r.json()).then(d=>{if(d.ok){closeModal();load();refreshCounts();}});}
+    body:JSON.stringify({action,note})}).then(r=>r.json()).then(d=>{if(d.ok){closeModal();load();refreshCounts();toast('Action applied ✓');}else toast(d.error||'Failed','error');});}
 function doFollowup(){
     const note=prompt('Follow-up note (e.g. emailed vendor for GSTR-1):')||'';
     // open a pre-filled mail draft for the team to actually send
@@ -662,13 +666,13 @@ function loadAttachments(){
 }
 function uploadAttach(){
     const f=document.getElementById('mAttachFile').files[0];
-    if(!f){alert('Choose a file first.');return;}
+    if(!f){toast('Choose a file first.','warn');return;}
     const fd=new FormData();
     fd.append('file',f);
     fd.append('note',document.getElementById('mAttachNote').value||'');
     fetch(`/api/row/${cur.id}/attachments`,{method:'POST',body:fd})
         .then(r=>r.json()).then(d=>{
-            if(d.error){alert(d.error);return;}
+            if(d.error){toast(d.error,'error');return;}
             document.getElementById('mAttachFile').value='';
             document.getElementById('mAttachNote').value='';
             loadAttachments();
@@ -825,8 +829,8 @@ function sendVendorEmail(){
     const to=document.getElementById('mMailTo').value.trim();
     const subj=document.getElementById('mMailSubject').value.trim();
     const body=document.getElementById('mMailBody').value.trim();
-    if(!to){alert('Enter vendor email address.');return;}
-    if(!body){alert('Email body is empty.');return;}
+    if(!to){toast('Enter vendor email address.','warn');return;}
+    if(!body){toast('Email body is empty.','warn');return;}
     const msg=document.getElementById('mEmailSendMsg');
     msg.style.color='var(--gray-light)';msg.textContent='Sending…';
     fetch(`/api/row/${cur.id}/vendor-email`,{method:'POST',
@@ -930,8 +934,8 @@ function toggleVendorMailForm(){
 function sendVendorLevelEmail(){
     const to=document.getElementById('vMailTo').value.trim();
     const body=document.getElementById('vMailBody').value.trim();
-    if(!to){alert('Enter vendor email address.');return;}
-    if(!body){alert('Email body is empty.');return;}
+    if(!to){toast('Enter vendor email address.','warn');return;}
+    if(!body){toast('Email body is empty.','warn');return;}
     const msg=document.getElementById('vMailSendMsg');
     msg.style.color='var(--gray-light)';msg.textContent='Sending…';
     fetch(`/api/gstin/${encodeURIComponent(vCurGstin)}/vendor-email`,{method:'POST',
@@ -968,28 +972,51 @@ function uploadBulkRemarks(input){
     const fd=new FormData(); fd.append('file',file);
     fetch('/api/bulk-remark/upload',{method:'POST',body:fd})
     .then(r=>r.json()).then(d=>{
-        if(d.error){alert('Error: '+d.error);return;}
-        alert('Done! Updated: '+d.updated+' rows, Skipped: '+d.skipped);
+        if(d.error){toast('Error: '+d.error,'error');return;}
+        toast('Done! Updated: '+d.updated+' rows, Skipped: '+d.skipped,'success',5000);
         reloadAll();
-    }).catch(e=>alert('Upload failed: '+e.message));
+    }).catch(e=>toast('Upload failed: '+e.message,'error'));
     input.value='';
 }
 
 // Locked period check
+var _curLock=null, _allLocks=[];
+function checkLock(){
+    const period=document.getElementById('fPeriod')?.value||'';
+    const state=document.getElementById('fState')?.value||'';
+    const match=_allLocks.find(l=>l.period===period&&(!state||l.state===state||l.state===''));
+    const banner=document.getElementById('lockBanner');
+    _curLock=match||null;
+    if(match){
+        document.getElementById('lockBannerText').textContent=
+            'Period '+match.period+' is locked by '+match.locked_by+' on '+match.locked_at+' — edits disabled.';
+        banner.style.display='flex';
+        const btn=document.getElementById('lockToggleBtn');
+        if(btn)btn.textContent='🔓 Unlock';
+    } else {
+        banner.style.display='none';
+    }
+    // Show lock button for admins on unlocked periods
+    const lockBtn=document.getElementById('adminLockBtn');
+    if(lockBtn)lockBtn.style.display=(isAdmin&&period&&period!=='all'&&!match)?'':'none';
+}
+function togglePeriodLock(){
+    const period=document.getElementById('fPeriod')?.value||'';
+    const state=document.getElementById('fState')?.value||'';
+    if(!period||period==='all'){toast('Select a specific period to lock/unlock.','warn');return;}
+    const action=_curLock?'unlock':'lock';
+    fetch('/api/lock-by-period',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({period,state,action})})
+    .then(r=>r.json()).then(d=>{
+        if(d.ok){
+            toast(action==='lock'?'Period '+period+' locked 🔒':'Period '+period+' unlocked 🔓',action==='lock'?'warn':'success');
+            fetch('/api/locked-periods').then(r=>r.json()).then(l=>{_allLocks=l;checkLock();});
+        } else toast(d.error||'Failed','error');
+    });
+}
 (function(){
     fetch('/api/locked-periods').then(r=>r.json()).then(locks=>{
-        if(!locks.length) return;
-        function checkLock(){
-            const period=document.getElementById('fPeriod')?.value||'';
-            const state=document.getElementById('fState')?.value||'';
-            const match=locks.find(l=>l.period===period&&(!state||l.state===state||l.state===''));
-            const banner=document.getElementById('lockBanner');
-            if(match){
-                document.getElementById('lockBannerText').textContent=
-                    'Period '+match.period+' is locked by '+match.locked_by+' on '+match.locked_at+' — edits disabled.';
-                banner.style.display='block';
-            } else { banner.style.display='none'; }
-        }
+        _allLocks=locks;
         document.getElementById('fPeriod')?.addEventListener('change',checkLock);
         document.getElementById('fState')?.addEventListener('change',checkLock);
         checkLock();
@@ -1092,7 +1119,7 @@ function saveInlineEdit(){
     if(!remark&&!reason){closeInlineEdit();return;}
     fetch(`/api/row/${_ieRowId}/remark`,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({remark,reason})}).then(r=>r.json()).then(d=>{
-        if(d.ok){closeInlineEdit();load();refreshCounts();}else alert(d.error||'Failed');
+        if(d.ok){closeInlineEdit();load();refreshCounts();toast('Remark saved ✓');}else toast(d.error||'Failed','error');
     });
 }
 
