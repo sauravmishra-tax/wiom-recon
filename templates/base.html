@@ -286,6 +286,7 @@
             <a href="{{ url_for('auth.users') }}" class="navlink {{ 'active' if request.endpoint=='auth.users' }}">Team</a>
             <a href="{{ url_for('settings_page') }}" class="navlink {{ 'active' if request.endpoint=='settings_page' }}">Settings</a>
             {% endif %}
+            <a href="{{ url_for('workflow_page') }}" class="navlink {{ 'active' if request.endpoint=='workflow_page' }}" title="Team Workflow Guide">📋 Workflow</a>
             <button id="tutHelpBtn" onclick="openTutorial()" title="App Tutorial — Help">?</button>
             <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle light / dark" aria-label="Toggle theme"></button>
             <div class="user-chip">

@@ -459,6 +459,12 @@ def _fy_list(periods):
     return sorted(fys, reverse=True)
 
 
+@app.route('/workflow')
+@login_required
+def workflow_page():
+    return render_template('workflow.html')
+
+
 @app.route('/detail')
 @login_required
 def detail():
