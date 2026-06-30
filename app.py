@@ -2115,6 +2115,7 @@ def api_comments(row_id):
         if text:
             db.session.add(RowComment(row_id=row_id, user_id=current_user.id,
                 user_name=current_user.name, user_role=current_user.role_display, text=text))
+            log_audit(row_id, current_user, 'comment', 'discussion', '', text)
             db.session.commit()
     cs = RowComment.query.filter_by(row_id=row_id).order_by(RowComment.created_at).all()
     return jsonify([{'user': c.user_name, 'role': c.user_role, 'text': c.text,
