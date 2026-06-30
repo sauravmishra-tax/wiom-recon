@@ -258,7 +258,10 @@
             <button class="btn sm" onclick="uploadAttach()">Upload</button>
         </div>
     </div>
-    <div id="mHistory" style="margin-top:14px;"></div>
+    <div style="margin-top:16px;border-top:1px solid var(--dark3);padding-top:12px;">
+        <h3 style="font-size:13px;margin-bottom:8px;">🕓 Remark Trail</h3>
+        <div id="mHistory" style="max-height:220px;overflow:auto;"></div>
+    </div>
     <!-- vendor email -->
     <div style="margin-top:16px;border-top:1px solid var(--dark3);padding-top:12px;" id="mEmailSection">
         <h3 style="font-size:13px;margin-bottom:8px;">✉️ Vendor Email <span class="muted" style="font-weight:400;" id="mEmailCount"></span></h3>
@@ -600,7 +603,7 @@ function openRow(id){cur=rowsCache[id];const r=cur;
     document.getElementById('mTable4').value=r.itc_table4||'';
     document.getElementById('mReason').value=r.team_reason||'';
     document.getElementById('mRemark').value=r.team_remark||'';
-    document.getElementById('mHistory').innerHTML='';
+    document.getElementById('mHistory').innerHTML='<span style="color:var(--gray);font-size:12px;">Loading…</span>';
     document.getElementById('mComments').innerHTML='';
     document.getElementById('mCommentText').value='';
     document.getElementById('mAttachList').innerHTML='<span style="color:var(--gray);font-size:12px;">Loading…</span>';
@@ -608,6 +611,7 @@ function openRow(id){cur=rowsCache[id];const r=cur;
     document.getElementById('mAttachNote').value='';
     renderFollow(r);
     loadComments();
+    loadHistory();
     loadAttachments();
     document.getElementById('mMailTo').value='';
     document.getElementById('mMailCc').value=_DEFAULT_CC;
