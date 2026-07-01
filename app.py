@@ -1236,6 +1236,31 @@ def save_zoho():
     return redirect(url_for('settings_page'))
 
 
+@app.route('/settings/zoho/exchange', methods=['POST'])
+@superadmin_required
+def exchange_zoho_code():
+    """Paste the ?code=... from the Zoho consent redirect here — the app uses
+    the already-saved Client ID/Secret to trade it for a refresh token itself,
+    no manual curl needed. The code is single-use and expires in ~10 min."""
+    code = (request.get_json(force=True) or {}).get('code', '').strip()
+    if not code:
+        return jsonify({'ok': False, 'error': 'Paste the code from the redirect URL first.'})
+    c = _zoho_creds()
+    if not c['client_id'] or not c['client_secret']:
+        return jsonify({'ok': False, 'error': 'Save Client ID + Client Secret first, then exchange the code.'})
+    # Zoho requires the exact redirect_uri used in the authorize step.
+    redirect_uri = request.url_root.rstrip('/')
+    try:
+        refresh_token = zoho.exchange_code_for_refresh_token(
+            c['client_id'], c['client_secret'], code, redirect_uri, c.get('region', 'in'))
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+    set_setting('zoho_refresh_token', refresh_token)
+    set_setting('zoho_last_status', 'refresh token obtained')
+    db.session.commit()
+    return jsonify({'ok': True, 'message': 'Refresh token saved — Zoho is now connected.'})
+
+
 @app.route('/settings/zoho/test', methods=['POST'])
 @superadmin_required
 def test_zoho():

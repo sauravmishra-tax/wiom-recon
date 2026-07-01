@@ -33,6 +33,25 @@ def _http(url, data=None, headers=None, method='GET', timeout=30):
         return json.loads(resp.read().decode())
 
 
+def exchange_code_for_refresh_token(client_id, client_secret, code, redirect_uri, region='in'):
+    """One-time: trade an OAuth authorization code (from the consent redirect)
+    for a long-lived refresh token. The code is single-use and expires in
+    ~10 minutes, so call this immediately after the user authorizes."""
+    accounts, _ = _domains(region)
+    url = f'{accounts}/oauth/v2/token'
+    out = _http(url, data={
+        'grant_type': 'authorization_code',
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'redirect_uri': redirect_uri,
+        'code': code,
+    }, method='POST')
+    tok = out.get('refresh_token')
+    if not tok:
+        raise RuntimeError(f"Zoho code exchange error: {out.get('error', out)}")
+    return tok
+
+
 def get_access_token(client_id, client_secret, refresh_token, region='in'):
     """Mint a short-lived access token from the long-lived refresh token."""
     accounts, _ = _domains(region)

@@ -39,6 +39,17 @@
     </form>
     <div id="zohoMsg" style="margin-top:14px;font-size:13px;font-weight:600;"></div>
     <p class="muted" style="margin-top:10px;">Last status: {{ last_status }}</p>
+
+    <div style="border-top:1px solid var(--dark3);margin-top:18px;padding-top:16px;">
+        <label>Got a fresh authorization code from the Zoho consent redirect?</label>
+        <div style="display:flex;gap:10px;">
+            <input id="zohoCode" placeholder="Paste the code=... value here (expires in ~10 min)" style="flex:1;">
+            <button class="btn" type="button" onclick="exchangeZohoCode()">🔁 Exchange for Refresh Token</button>
+        </div>
+        <p class="muted" style="margin-top:6px;">Save Client ID + Secret above first. This uses them to fetch the
+            Refresh Token automatically — no manual curl command needed.</p>
+        <div id="zohoExMsg" style="margin-top:8px;font-size:13px;font-weight:600;"></div>
+    </div>
   </div>
 
   <!-- RIGHT: setup guide -->
@@ -166,6 +177,18 @@ function syncZoho(){
     fetch('/settings/zoho/sync',{method:'POST'}).then(r=>r.json()).then(d=>{
         if(d.ok)msg(`✓ Synced ${d.count} vendors · ${d.updated_rows} row names updated.`,true);
         else msg('✗ '+(d.error||'Sync failed'),false);});
+}
+function exchangeZohoCode(){
+    const code=document.getElementById('zohoCode').value.trim();
+    const m=document.getElementById('zohoExMsg');
+    if(!code){m.textContent='Paste the code first.';m.style.color='var(--negc)';return;}
+    m.textContent='Exchanging…';m.style.color='var(--green)';
+    fetch('/settings/zoho/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})})
+        .then(r=>r.json()).then(d=>{
+            m.textContent=(d.ok?'✓ ':'✗ ')+(d.message||d.error||'');
+            m.style.color=d.ok?'var(--green)':'var(--negc)';
+            if(d.ok){document.getElementById('zohoCode').value='';setTimeout(()=>location.reload(),1200);}
+        });
 }
 function smsg(t,ok){const m=document.getElementById('smtpMsg');m.textContent=t;m.style.color=ok?'var(--green)':'var(--negc)';}
 function testSmtp(){smsg('Testing SMTP…',true);
