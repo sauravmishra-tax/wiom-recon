@@ -8,9 +8,11 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 
 
-def send_email(cfg, to, subject, html_body, attachment=None, attachment_name='report.xlsx'):
+def send_email(cfg, to, subject, html_body, attachment=None, attachment_name='report.xlsx', attachments=None):
     """cfg = dict(host, port, user, password, from_addr, use_tls).
-    Returns (ok: bool, message: str). Never raises."""
+    attachments: optional list of (bytes, filename) tuples for multiple files
+    (attachment/attachment_name kept for backward compatibility, sent as an
+    extra attachment if provided). Returns (ok: bool, message: str). Never raises."""
     host = (cfg.get('host') or '').strip()
     if not host:
         return False, 'SMTP not configured.'
@@ -26,6 +28,10 @@ def send_email(cfg, to, subject, html_body, attachment=None, attachment_name='re
         if attachment:
             part = MIMEApplication(attachment, Name=attachment_name)
             part['Content-Disposition'] = f'attachment; filename="{attachment_name}"'
+            msg.attach(part)
+        for data, fname in (attachments or []):
+            part = MIMEApplication(data, Name=fname)
+            part['Content-Disposition'] = f'attachment; filename="{fname}"'
             msg.attach(part)
 
         port = int(cfg.get('port') or 587)

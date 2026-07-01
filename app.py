@@ -1312,14 +1312,21 @@ def _send_cfo_email(recipient=None):
         return False, 'No CFO recipient configured.'
     if not _smtp_configured():
         return False, 'SMTP not configured.'
+    import slack_util
     rows = ReconRow.query.order_by(ReconRow.state_name, ReconRow.period).all()
     ctx = _cfo_context(rows, 'all')
     gap = gap_from_rows(rows)
     xls = export_excel.build_cumulative_excel(rows, gap, 'All states · cumulative')
     body = render_template('cfo_email.html', **ctx)
+    stamp = now_ist().strftime('%Y%m%d')
+    title = f"WIOM GST Recon — Controller Summary ({now_ist().strftime('%d-%b-%Y')})"
+    pdf_bytes = slack_util.render_cfo_summary_image(title, ctx, fmt='PDF')
     return email_util.send_email(_smtp_cfg(), to,
         f"WIOM GST Recon — CFO Summary ({ctx['generated']})", body,
-        attachment=xls.read(), attachment_name=f"WIOM_Cumulative_{now_ist().strftime('%Y%m%d')}.xlsx")
+        attachments=[
+            (xls.read(), f"WIOM_Cumulative_{stamp}.xlsx"),
+            (pdf_bytes, f"WIOM_CFO_Summary_{stamp}.pdf"),
+        ])
 
 
 @app.route('/cfo-email/send', methods=['POST'])

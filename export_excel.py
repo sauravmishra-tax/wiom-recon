@@ -50,6 +50,7 @@ def build_cumulative_excel(rows, gap_rows, scope_label):
 
     matched = [r for r in rows if r.category == 'matched']
     fully = [r for r in matched if 'Fully Reconciled' in (r.recon_status or '')]
+    cross_only = [r for r in matched if 'Fully Reconciled' not in (r.recon_status or '')]
     books = [r for r in rows if r.category == 'books_only']
     gstn = [r for r in rows if r.category == 'gstn_only']
 
@@ -65,7 +66,7 @@ def build_cumulative_excel(rows, gap_rows, scope_label):
          'Recon Status', 'Reason', 'Team Remark', 'Workflow Status', 'Remarked By', 'Approved By']
     ws = _sheet(wb, 'Expert Cross-Match', 'E0119D',
                 f'WIOM · CUMULATIVE Expert Cross-Match · {scope_label}', h)
-    for i, r in enumerate(matched, 1):
+    for i, r in enumerate(cross_only, 1):
         _row(ws, i + 3, [i, r.gstin, r.vendor, r.state_name, r.period, r.txn_type,
             r.books_inv, r.gstn_inv, r.books_date, r.gstn_date,
             r.books_taxable, r.gstn_taxable, (r.books_taxable or 0) - (r.gstn_taxable or 0),

@@ -25,10 +25,10 @@ def post_message(webhook_url, text, blocks=None):
         return False, str(e)
 
 
-def render_cfo_summary_image(title, ctx):
-    """Render a full PNG snapshot of the CFO Summary page (State Health,
+def render_cfo_summary_image(title, ctx, fmt='PNG'):
+    """Render a full snapshot of the CFO Summary page (State Health,
     Reconciliation Summary, Financial KPIs, breakdown tables, Top-10 gaps)
-    using Pillow — no headless browser needed. Returns PNG bytes."""
+    using Pillow — no headless browser needed. fmt='PNG' or 'PDF'. Returns bytes."""
     from PIL import Image, ImageDraw, ImageFont
     import io
 
@@ -205,7 +205,10 @@ def render_cfo_summary_image(title, ctx):
             font=f_small, fill=(170, 170, 170), anchor='ma')
 
     buf = io.BytesIO()
-    img.save(buf, format='PNG')
+    if fmt == 'PDF':
+        img.save(buf, format='PDF', resolution=150.0)
+    else:
+        img.save(buf, format='PNG')
     return buf.getvalue()
 
 
