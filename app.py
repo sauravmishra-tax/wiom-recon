@@ -1248,8 +1248,10 @@ def exchange_zoho_code():
     c = _zoho_creds()
     if not c['client_id'] or not c['client_secret']:
         return jsonify({'ok': False, 'error': 'Save Client ID + Client Secret first, then exchange the code.'})
-    # Zoho requires the exact redirect_uri used in the authorize step.
-    redirect_uri = request.url_root.rstrip('/')
+    # Zoho requires the exact redirect_uri used in the authorize step. Don't derive
+    # this from request.url_root — behind Railway's proxy it can resolve to http://
+    # or an internal host, which silently mismatches and Zoho returns invalid_code.
+    redirect_uri = 'https://web-production-bf681c.up.railway.app'
     try:
         refresh_token = zoho.exchange_code_for_refresh_token(
             c['client_id'], c['client_secret'], code, redirect_uri, c.get('region', 'in'))
