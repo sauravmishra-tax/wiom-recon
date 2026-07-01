@@ -111,7 +111,7 @@ def notify_cfo_summary():
         today = date.today().strftime('%d %b %Y')
 
         msg = (
-            f':bar_chart: *WIOM GST Recon — Controller Summary* | _{today}_\n'
+            f':bar_chart: *WIOM GST Recon — Summary Report* | _{today}_\n'
             f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
             f'>:memo: Total Rows: *{total}*\n'
             f'>:white_check_mark: Approved: *{approved}*   :heavy_check_mark: Resolved: *{resolved}*\n'

@@ -72,7 +72,7 @@ def render_cfo_summary_image(title, ctx, fmt='PNG'):
     # header bar
     d.rectangle([0, 0, W, 70], fill=(26, 16, 35))
     d.text((PAD, 14), 'WIOM GST Recon', font=f_title, fill=(255, 255, 255))
-    d.text((PAD, 42), 'Books x GST - Controller Summary', font=f_small, fill=(200, 170, 220))
+    d.text((PAD, 42), 'Books x GST - Summary Report', font=f_small, fill=(200, 170, 220))
     d.text((W - PAD, 24), title.split('(')[-1].rstrip(')'), font=f_body, fill=(255, 255, 255), anchor='ra')
 
     y = 90

@@ -60,7 +60,7 @@
 <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start;">
   <!-- EMAIL / SMTP -->
   <div class="card">
-    <h2>✉️ Email (SMTP) — vendor follow-ups &amp; CFO summary</h2>
+    <h2>✉️ Email (SMTP) — vendor follow-ups &amp; Summary Report</h2>
     <div style="margin-bottom:14px;"><span class="chip {{ 'approved' if smtp_configured else 'open' }}">{{ 'Configured' if smtp_configured else 'Not configured' }}</span></div>
     <form method="POST" action="{{ url_for('save_smtp') }}">
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;">
@@ -79,7 +79,7 @@
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <button class="btn" type="submit">💾 Save</button>
             <button class="btn ghost" type="button" onclick="testSmtp()">🔌 Test SMTP</button>
-            <button class="btn green" type="button" onclick="sendCfo()">📤 Email CFO summary now</button>
+            <button class="btn green" type="button" onclick="sendCfo()">📤 Email Summary Report now</button>
         </div>
     </form>
     <div id="smtpMsg" style="margin-top:12px;font-size:13px;font-weight:600;"></div>
@@ -166,7 +166,7 @@ function syncZoho(){
 function smsg(t,ok){const m=document.getElementById('smtpMsg');m.textContent=t;m.style.color=ok?'var(--green)':'var(--negc)';}
 function testSmtp(){smsg('Testing SMTP…',true);
     fetch('/settings/smtp/test',{method:'POST'}).then(r=>r.json()).then(d=>smsg((d.ok?'✓ ':'✗ ')+(d.message||''),d.ok));}
-function sendCfo(){smsg('Sending CFO summary…',true);
+function sendCfo(){smsg('Sending Summary Report…',true);
     fetch('/cfo-email/send',{method:'POST'}).then(r=>r.json()).then(d=>smsg((d.ok?'✓ ':'✗ ')+(d.message||''),d.ok));}
 function sendSlack(){const m=document.getElementById('slackMsg');m.textContent='Posting to Slack…';m.style.color='var(--green)';
     fetch('/slack/send',{method:'POST'}).then(r=>r.json()).then(d=>{m.textContent=(d.ok?'✓ ':'✗ ')+(d.message||'');m.style.color=d.ok?'var(--green)':'var(--negc)';});}

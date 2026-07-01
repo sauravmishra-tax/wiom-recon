@@ -290,7 +290,7 @@
 <div class="page-head">
     <div><h2>Dashboard</h2><div class="sub">{% if current_user.is_admin %}All states · all periods · cumulative{% else %}Your states · cumulative{% endif %}</div></div>
     <div style="display:flex;gap:10px;">
-        {% if current_user.is_admin %}<a href="{{ url_for('cfo_summary') }}" class="btn ghost">📄 CFO Summary</a>
+        {% if current_user.is_admin %}<a href="{{ url_for('cfo_summary') }}" class="btn ghost">📄 Summary Report</a>
         <a href="{{ url_for('upload_page') }}" class="btn">＋ New Recon</a>{% endif %}
     </div>
 </div>

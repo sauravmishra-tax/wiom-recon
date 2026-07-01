@@ -144,7 +144,7 @@ def _start_scheduler(app):
     sched.add_job(slack_notify.notify_pending_summary, 'cron', hour=7, minute=0, id='slack_pending')
 
     sched.start()
-    print("  [scheduler] Started — Slack pending @7:00 IST, CFO Summary image @18:00 IST (Mon-Fri)")
+    print("  [scheduler] Started — Slack pending @7:00 IST, Summary Report image @18:00 IST (Mon-Fri)")
     return app
 
 
@@ -1319,10 +1319,10 @@ def _send_cfo_email(recipient=None):
     xls = export_excel.build_cumulative_excel(rows, gap, 'All states · cumulative')
     body = render_template('cfo_email.html', **ctx)
     stamp = now_ist().strftime('%Y%m%d')
-    title = f"WIOM GST Recon — Controller Summary ({now_ist().strftime('%d-%b-%Y')})"
+    title = f"WIOM GST Recon — Summary Report ({now_ist().strftime('%d-%b-%Y')})"
     pdf_bytes = slack_util.render_cfo_summary_image(title, ctx, fmt='PDF')
     return email_util.send_email(_smtp_cfg(), to,
-        f"WIOM GST Recon — CFO Summary ({ctx['generated']})", body,
+        f"WIOM GST Recon — Summary Report ({ctx['generated']})", body,
         attachments=[
             (xls.read(), f"WIOM_Cumulative_{stamp}.xlsx"),
             (pdf_bytes, f"WIOM_CFO_Summary_{stamp}.pdf"),
@@ -1374,7 +1374,7 @@ def _send_slack_report():
         return False, 'Slack not configured — add a Bot Token + Channel, or a Webhook URL.'
     rows = ReconRow.query.all()
     ctx = _cfo_context(rows, None)
-    title = f"WIOM GST Recon — Controller Summary ({now_ist().strftime('%d-%b-%Y')})"
+    title = f"WIOM GST Recon — Summary Report ({now_ist().strftime('%d-%b-%Y')})"
     if bot_token and channel:
         try:
             img_bytes = slack_util.render_cfo_summary_image(title, ctx)
