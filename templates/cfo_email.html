@@ -1,9 +1,21 @@
-<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:0 auto;color:#15171f;">
-  <div style="background:linear-gradient(110deg,#0B0B11,#7A0A57);color:#fff;padding:20px 24px;border-radius:10px 10px 0 0;">
+<style>
+  .wr{font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:0 auto;color:#15171f;}
+  .hd{background:linear-gradient(110deg,#0B0B11,#7A0A57);color:#fff;padding:20px 24px;border-radius:10px 10px 0 0;}
+  .bd{border:1px solid #e4e7f0;border-top:none;border-radius:0 0 10px 10px;padding:22px 24px;}
+  .sh{font-size:14px;margin:0 0 10px;}
+  .tb{width:100%;border-collapse:collapse;margin-bottom:20px;}
+  .tb th{text-align:left;padding:7px;background:#f4f6f9;}
+  .tb td{padding:7px;border-bottom:1px solid #eef0f4;}
+  .r{text-align:right;} .neg{color:#d61f3a;} .pos{color:#0b9d63;} .blue{color:#2270d8;} .mut{color:#8a8aa0;}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;}
+  .kv td{padding:7px 0;border:none;}
+</style>
+<div class="wr">
+  <div class="hd">
     <h2 style="margin:0;font-size:18px;">WIOM GST Recon — Summary Report</h2>
     <p style="margin:4px 0 0;font-size:12px;color:#d7cfe0;">{{ scope }} · Cumulative to date · {{ generated }}</p>
   </div>
-  <div style="border:1px solid #e4e7f0;border-top:none;border-radius:0 0 10px 10px;padding:22px 24px;">
+  <div class="bd">
 
     <p style="font-size:14px;line-height:1.6;margin:0 0 18px;">
       Hi team,<br><br>
@@ -13,80 +25,63 @@
       the attached Excel, and a print-ready copy is attached as PDF.
     </p>
 
-    <h3 style="font-size:14px;margin:0 0 10px;">🚦 State Health Status</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:20px;">
-      <tr style="background:#f4f6f9;">
-        <th style="text-align:left;padding:7px;">State</th>
-        <th style="text-align:left;padding:7px;">Open</th>
-        <th style="text-align:left;padding:7px;">Remarked</th>
-        <th style="text-align:left;padding:7px;">Done</th>
-        <th style="text-align:right;padding:7px;">ITC Risk ₹</th>
-        <th style="text-align:left;padding:7px;">Last Upload</th>
-      </tr>
+    <h3 class="sh">🚦 State Health Status</h3>
+    <table class="tb" style="font-size:12.5px;">
+      <tr><th>State</th><th>Open</th><th>Remarked</th><th>Done</th><th class="r">ITC Risk ₹</th><th>Last Upload</th></tr>
       {% for s in state_health %}
       <tr>
-        <td style="padding:7px;border-bottom:1px solid #eef0f4;"><b>{{ s.state }}</b>
-          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;
-            background:{{ '#d61f3a' if s.light=='red' else ('#d9a70f' if s.light=='yellow' else ('#0b9d63' if s.light=='green' else '#c3c3d3')) }};"></span></td>
-        <td style="padding:7px;border-bottom:1px solid #eef0f4;">{{ s.open }}</td>
-        <td style="padding:7px;border-bottom:1px solid #eef0f4;">{{ s.remarked }}</td>
-        <td style="padding:7px;border-bottom:1px solid #eef0f4;">{{ s.approved }}</td>
-        <td style="text-align:right;padding:7px;border-bottom:1px solid #eef0f4;color:#d61f3a;">{{ '{:,}'.format(s.itc_risk) }}</td>
-        <td style="padding:7px;border-bottom:1px solid #eef0f4;color:#8a8aa0;">{{ s.last_upload }}{% if s.last_period %} ({{ s.last_period }}){% endif %}</td>
+        <td><b>{{ s.state }}</b><span class="dot" style="background:{{ '#d61f3a' if s.light=='red' else ('#d9a70f' if s.light=='yellow' else ('#0b9d63' if s.light=='green' else '#c3c3d3')) }};"></span></td>
+        <td>{{ s.open }}</td><td>{{ s.remarked }}</td><td>{{ s.approved }}</td>
+        <td class="r neg">{{ '{:,}'.format(s.itc_risk) }}</td>
+        <td class="mut">{{ s.last_upload }}{% if s.last_period %} ({{ s.last_period }}){% endif %}</td>
       </tr>
       {% endfor %}
     </table>
 
-    <h3 style="font-size:14px;margin:0 0 10px;">📋 Reconciliation Summary</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">
-      <tr><td style="padding:6px 0;">🔗 Expert Cross-Match</td><td style="text-align:right;">{{ recon_summary.cross }} · ₹{{ '{:,}'.format(recon_summary.cross_amt) }}</td></tr>
-      <tr><td style="padding:6px 0;color:#d61f3a;">📕 Books Only (ITC at risk)</td><td style="text-align:right;color:#d61f3a;">{{ books_only }} · ₹{{ '{:,}'.format(recon_summary.books_amt) }}</td></tr>
-      <tr><td style="padding:6px 0;color:#2270d8;">🧾 GSTR-2B Only (unbooked)</td><td style="text-align:right;color:#2270d8;">{{ gstn_only }} · ₹{{ '{:,}'.format(recon_summary.gstn_amt) }}</td></tr>
-      <tr><td style="padding:6px 0;color:#0b9d63;">✅ Fully Reconciled (ITC safe)</td><td style="text-align:right;color:#0b9d63;">{{ fully }} · ₹{{ '{:,}'.format(recon_summary.fully_amt) }}</td></tr>
-      <tr><td style="padding:6px 0;">🚫 Rejected — Ineligible</td><td style="text-align:right;">{{ rejected or 0 }} · ₹{{ '{:,}'.format(recon_summary.rejected_amt) }}</td></tr>
-      <tr><td style="padding:6px 0;">📊 GSTIN Gap Analysis (net)</td><td style="text-align:right;">{{ recon_summary.gap }} · ₹{{ '{:,}'.format(recon_summary.gap_amt) }}</td></tr>
+    <h3 class="sh">📋 Reconciliation Summary</h3>
+    <table class="tb kv" style="font-size:13px;">
+      <tr><td>🔗 Expert Cross-Match</td><td class="r">{{ recon_summary.cross }} · ₹{{ '{:,}'.format(recon_summary.cross_amt) }}</td></tr>
+      <tr><td class="neg">📕 Books Only (ITC at risk)</td><td class="r neg">{{ books_only }} · ₹{{ '{:,}'.format(recon_summary.books_amt) }}</td></tr>
+      <tr><td class="blue">🧾 GSTR-2B Only (unbooked)</td><td class="r blue">{{ gstn_only }} · ₹{{ '{:,}'.format(recon_summary.gstn_amt) }}</td></tr>
+      <tr><td class="pos">✅ Fully Reconciled (ITC safe)</td><td class="r pos">{{ fully }} · ₹{{ '{:,}'.format(recon_summary.fully_amt) }}</td></tr>
+      <tr><td>🚫 Rejected — Ineligible</td><td class="r">{{ rejected or 0 }} · ₹{{ '{:,}'.format(recon_summary.rejected_amt) }}</td></tr>
+      <tr><td>📊 GSTIN Gap Analysis (net)</td><td class="r">{{ recon_summary.gap }} · ₹{{ '{:,}'.format(recon_summary.gap_amt) }}</td></tr>
     </table>
 
-    <h3 style="font-size:14px;margin:0 0 10px;">Financial KPIs</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
-      <tr><td style="padding:8px 0;color:#d61f3a;"><b>ITC at Risk (Books not in 2B)</b></td><td style="text-align:right;font-weight:700;color:#d61f3a;">₹{{ '{:,}'.format(itc_risk) }}</td></tr>
-      <tr><td style="padding:8px 0;color:#2270d8;"><b>Excess in GSTR-2B (unbooked)</b></td><td style="text-align:right;font-weight:700;color:#2270d8;">₹{{ '{:,}'.format(excess_2b) }}</td></tr>
-      <tr><td style="padding:8px 0;">Total invoice rows</td><td style="text-align:right;">{{ '{:,}'.format(total) }}</td></tr>
-      <tr><td style="padding:8px 0;">Resolved / Pending</td><td style="text-align:right;">{{ done }} / {{ pending }}</td></tr>
+    <h3 class="sh">Financial KPIs</h3>
+    <table class="tb kv" style="font-size:14px;">
+      <tr><td class="neg"><b>ITC at Risk (Books not in 2B)</b></td><td class="r neg" style="font-weight:700;">₹{{ '{:,}'.format(itc_risk) }}</td></tr>
+      <tr><td class="blue"><b>Excess in GSTR-2B (unbooked)</b></td><td class="r blue" style="font-weight:700;">₹{{ '{:,}'.format(excess_2b) }}</td></tr>
+      <tr><td>Total invoice rows</td><td class="r">{{ '{:,}'.format(total) }}</td></tr>
+      <tr><td>Resolved / Pending</td><td class="r">{{ done }} / {{ pending }}</td></tr>
     </table>
 
     {% if breakdown.by_reason %}
-    <h3 style="font-size:14px;margin:0 0 10px;">By Reason (team-tagged)</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:20px;">
-      <tr style="background:#f4f6f9;"><th style="text-align:left;padding:7px;">Reason</th><th style="text-align:right;padding:7px;">Invoices</th><th style="text-align:right;padding:7px;">Amount ₹</th></tr>
+    <h3 class="sh">By Reason (team-tagged)</h3>
+    <table class="tb" style="font-size:12.5px;">
+      <tr><th>Reason</th><th class="r">Invoices</th><th class="r">Amount ₹</th></tr>
       {% for rsn, v in breakdown.by_reason.items() %}
-      <tr><td style="padding:7px;border-bottom:1px solid #eef0f4;">{{ rsn }}</td>
-        <td style="text-align:right;padding:7px;border-bottom:1px solid #eef0f4;">{{ '{:,}'.format(v.count) }}</td>
-        <td style="text-align:right;padding:7px;border-bottom:1px solid #eef0f4;color:#d61f3a;">{{ '{:,}'.format(v.value) }}</td></tr>
+      <tr><td>{{ rsn }}</td><td class="r">{{ '{:,}'.format(v.count) }}</td><td class="r neg">{{ '{:,}'.format(v.value) }}</td></tr>
       {% endfor %}
     </table>
     {% endif %}
 
-    <h3 style="font-size:14px;margin:0 0 10px;">By Workflow Status</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:20px;">
-      <tr style="background:#f4f6f9;"><th style="text-align:left;padding:7px;">Status</th><th style="text-align:right;padding:7px;">Invoices</th><th style="text-align:right;padding:7px;">Amount ₹</th></tr>
+    <h3 class="sh">By Workflow Status</h3>
+    <table class="tb" style="font-size:12.5px;">
+      <tr><th>Status</th><th class="r">Invoices</th><th class="r">Amount ₹</th></tr>
       {% for st, v in breakdown.by_status.items() %}
-      <tr><td style="padding:7px;border-bottom:1px solid #eef0f4;text-transform:capitalize;">{{ st }}</td>
-        <td style="text-align:right;padding:7px;border-bottom:1px solid #eef0f4;">{{ '{:,}'.format(v.count) }}</td>
-        <td style="text-align:right;padding:7px;border-bottom:1px solid #eef0f4;">{{ '{:,}'.format(v.value) }}</td></tr>
+      <tr><td style="text-transform:capitalize;">{{ st }}</td><td class="r">{{ '{:,}'.format(v.count) }}</td><td class="r">{{ '{:,}'.format(v.value) }}</td></tr>
       {% endfor %}
     </table>
 
-    <h3 style="font-size:14px;margin:0 0 10px;">Top 10 GSTINs by Gap</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
-      <tr style="background:#f4f6f9;"><th style="text-align:left;padding:7px;">GSTIN</th><th style="text-align:left;padding:7px;">Vendor</th><th style="text-align:left;padding:7px;">State</th><th style="text-align:right;padding:7px;">Total Gap ₹</th><th style="text-align:left;padding:7px;">Risk</th></tr>
+    <h3 class="sh">Top 10 GSTINs by Gap</h3>
+    <table class="tb" style="font-size:12px;">
+      <tr><th>GSTIN</th><th>Vendor</th><th>State</th><th class="r">Total Gap ₹</th><th>Risk</th></tr>
       {% for g in top_gaps %}
       <tr>
-        <td style="padding:7px;border-bottom:1px solid #eef0f4;"><b>{{ g.gstin }}</b></td>
-        <td style="padding:7px;border-bottom:1px solid #eef0f4;">{{ g.vendor }}</td>
-        <td style="padding:7px;border-bottom:1px solid #eef0f4;">{{ g.state }}</td>
-        <td style="text-align:right;padding:7px;border-bottom:1px solid #eef0f4;color:{{ '#d61f3a' if g.total_gap<0 else '#0b9d63' }};">{{ '{:,}'.format(g.total_gap|int) }}</td>
-        <td style="padding:7px;border-bottom:1px solid #eef0f4;">{{ g.risk }}</td>
+        <td><b>{{ g.gstin }}</b></td><td>{{ g.vendor }}</td><td>{{ g.state }}</td>
+        <td class="r {{ 'neg' if g.total_gap<0 else 'pos' }}">{{ '{:,}'.format(g.total_gap|int) }}</td>
+        <td>{{ g.risk }}</td>
       </tr>
       {% endfor %}
     </table>

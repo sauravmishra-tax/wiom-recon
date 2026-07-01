@@ -206,9 +206,13 @@ def render_cfo_summary_image(title, ctx, fmt='PNG'):
 
     buf = io.BytesIO()
     if fmt == 'PDF':
-        img.save(buf, format='PDF', resolution=150.0)
+        # Shrink for email attachment: smaller canvas + palette mode keeps it
+        # legible while cutting file size well below Gmail's ~102KB clip limit.
+        small = img.resize((int(W * 0.72), int(H * 0.72)), Image.LANCZOS)
+        small = small.convert('P', palette=Image.ADAPTIVE, colors=64).convert('RGB')
+        small.save(buf, format='PDF', resolution=120.0)
     else:
-        img.save(buf, format='PNG')
+        img.save(buf, format='PNG', optimize=True)
     return buf.getvalue()
 
 
