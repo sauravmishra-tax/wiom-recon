@@ -48,7 +48,9 @@
         <li>Go to <b>api-console.zoho.in</b> → create a <b>Self Client</b>.</li>
         <li>Copy the <b>Client ID</b> &amp; <b>Client Secret</b>.</li>
         <li>In the Self Client, generate a code with scope
-            <code style="color:var(--pink-light)">ZohoBooks.contacts.READ</code> (valid 10 min).</li>
+            <code style="color:var(--pink-light)">ZohoBooks.fullaccess.READ</code> (valid 10 min) —
+            this covers contacts, invoices, bills, GST returns, everything read-only, so future
+            features won't need a new token.</li>
         <li>Exchange that code for a <b>Refresh Token</b> (one-time) — the refresh token never expires.</li>
         <li>Find your <b>Organization ID</b> in Zoho Books → Settings → Organisation.</li>
         <li>Paste all four here, pick region <b>.in</b>, Save → Test → Sync.</li>
