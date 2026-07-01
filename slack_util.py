@@ -25,6 +25,29 @@ def post_message(webhook_url, text, blocks=None):
         return False, str(e)
 
 
+def post_message_bot(bot_token, channel, text, blocks=None):
+    """Post via Slack Bot Token (chat.postMessage) — works with a bot already
+    added to the channel, no incoming-webhook setup needed. Returns (ok, message)."""
+    if not bot_token or not channel:
+        return False, 'Slack bot token / channel not configured.'
+    payload = {'channel': channel, 'text': text}
+    if blocks:
+        payload['blocks'] = blocks
+    try:
+        req = urllib.request.Request(
+            'https://slack.com/api/chat.postMessage',
+            data=json.dumps(payload).encode(),
+            headers={'Content-Type': 'application/json',
+                     'Authorization': f'Bearer {bot_token}'}, method='POST')
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            body = json.loads(resp.read().decode())
+        if body.get('ok'):
+            return True, 'sent'
+        return False, body.get('error', 'unknown error')
+    except Exception as e:
+        return False, str(e)
+
+
 def build_report_blocks(title, kpis, by_state, by_reason, top_vendors):
     """Build a tidy Slack Block-Kit message for the daily recon report.
     kpis: list of (label, value). by_state/by_reason: list of (name, count, value).

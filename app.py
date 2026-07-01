@@ -1211,8 +1211,10 @@ def settings_page():
         has_smtp_pw=bool(get_setting('smtp_password')),
         cfo_email=get_setting('cfo_email'), cfo_send_day=get_setting('cfo_send_day', '1'),
         # Slack
-        slack_configured=bool(get_setting('slack_webhook')),
+        slack_configured=bool(get_setting('slack_webhook')) or bool(get_setting('slack_bot_token')),
         slack_send_day=get_setting('slack_send_day', '*'),
+        slack_bot_configured=bool(get_setting('slack_bot_token')),
+        slack_channel=get_setting('slack_channel'),
         # GSP / GSTR-2B source
         gsp_provider=get_setting('gsp_provider'), gsp_configured=bool(get_setting('gsp_provider')),
         # FIX 6 — dynamic email settings
@@ -1340,6 +1342,14 @@ def save_slack():
         set_setting('slack_webhook', url)
     if request.form.get('clear_webhook') == 'on':
         set_setting('slack_webhook', '')
+    bot_token = request.form.get('slack_bot_token', '').strip()
+    if bot_token:
+        set_setting('slack_bot_token', bot_token)
+    if request.form.get('clear_bot_token') == 'on':
+        set_setting('slack_bot_token', '')
+    channel = request.form.get('slack_channel', '').strip()
+    if channel:
+        set_setting('slack_channel', channel)
     db.session.commit()
     from flask import flash
     flash('Slack settings saved.', 'success')
@@ -1347,11 +1357,15 @@ def save_slack():
 
 
 def _send_slack_report():
-    """Build + post the daily recon status report to Slack. Returns (ok, msg)."""
+    """Build + post the daily recon status report to Slack. Returns (ok, msg).
+    Prefers Bot Token + Channel (works with a bot already added to the channel);
+    falls back to Incoming Webhook if bot isn't configured."""
     import slack_util
+    bot_token = get_setting('slack_bot_token')
+    channel = get_setting('slack_channel')
     url = get_setting('slack_webhook')
-    if not url:
-        return False, 'Slack webhook not configured.'
+    if not bot_token and not url:
+        return False, 'Slack not configured — add a Bot Token + Channel, or a Webhook URL.'
     rows = ReconRow.query.all()
     stats = _summary_stats_all()
     bd = _breakdown_data(rows)
@@ -1377,6 +1391,8 @@ def _send_slack_report():
         f"WIOM GST Recon — Daily Status ({now_ist().strftime('%d-%b-%Y')})",
         kpis, by_state, by_reason, top_vendors)
     text = f"WIOM GST Recon daily: ITC at risk ₹{stats['itc_risk']:,}, {stats['open']} open, {stats['done']} resolved"
+    if bot_token and channel:
+        return slack_util.post_message_bot(bot_token, channel, text, blocks)
     return slack_util.post_message(url, text, blocks)
 
 

@@ -100,19 +100,29 @@
     <h2>💬 Slack — Daily Status Report</h2>
     <div style="margin-bottom:14px;"><span class="chip {{ 'approved' if slack_configured else 'open' }}">{{ 'Connected' if slack_configured else 'Not configured' }}</span></div>
     <form method="POST" action="{{ url_for('save_slack') }}">
-        <div style="display:grid;grid-template-columns:3fr 1fr;gap:14px;">
-            <div><label>Incoming Webhook URL</label><input name="webhook" type="password"
-                placeholder="{{ '•••••• saved — blank to keep' if slack_configured else 'https://hooks.slack.com/services/...' }}"></div>
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;">
+            <div><label>Bot User OAuth Token <span class="muted" style="font-weight:400;">(uses the bot already added to your channel)</span></label>
+                <input name="slack_bot_token" type="password"
+                placeholder="{{ '•••••• saved — blank to keep' if slack_bot_configured else 'xoxb-...' }}"></div>
+            <div><label>Channel ID</label><input name="slack_channel" value="{{ slack_channel or '' }}" placeholder="C0BBF1L4N6A"></div>
             <div><label>Send day (* = daily)</label><input name="slack_send_day" value="{{ slack_send_day }}" placeholder="*"></div>
         </div>
+        <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;align-items:center;">
+            <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--gray-light);"><input type="checkbox" name="clear_bot_token" style="width:auto;"> Clear saved bot token</label>
+        </div>
+        <details style="margin-top:14px;">
+            <summary style="cursor:pointer;font-size:12.5px;color:var(--gray-light);">Or use an Incoming Webhook URL instead</summary>
+            <div style="margin-top:10px;"><label>Incoming Webhook URL</label><input name="webhook" type="password"
+                placeholder="{{ '•••••• saved — blank to keep' if slack_configured else 'https://hooks.slack.com/services/...' }}"></div>
+            <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--gray-light);margin-top:8px;"><input type="checkbox" name="clear_webhook" style="width:auto;"> Clear saved webhook</label>
+        </details>
         <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center;">
             <button class="btn" type="submit">💾 Save</button>
             <button class="btn green" type="button" onclick="sendSlack()">📤 Send to Slack now</button>
-            <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--gray-light);"><input type="checkbox" name="clear_webhook" style="width:auto;"> Clear saved webhook</label>
         </div>
     </form>
     <div id="slackMsg" style="margin-top:12px;font-size:13px;font-weight:600;"></div>
-    <p class="muted" style="margin-top:8px;">Setup: api.slack.com → your app → <b>Incoming Webhooks</b> → pick a channel → copy URL → paste here. Report posts daily at 09:30 IST (auto, while app is running) + on-demand.</p>
+    <p class="muted" style="margin-top:8px;">Bot method: api.slack.com/apps → your app (already in the channel) → <b>OAuth &amp; Permissions</b> → copy <b>Bot User OAuth Token</b> (xoxb-...) → paste above with the channel ID. No new webhook needed. Report posts daily at 09:30 IST (auto, while app is running) + on-demand.</p>
 </div>
 
 <div class="card">
