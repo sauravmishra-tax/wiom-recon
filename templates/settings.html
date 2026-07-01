@@ -38,6 +38,12 @@
         </div>
     </form>
     <div id="zohoMsg" style="margin-top:14px;font-size:13px;font-weight:600;"></div>
+    <div id="zohoProgWrap" style="display:none;margin-top:12px;">
+        <div style="background:var(--dark2);border-radius:8px;height:8px;overflow:hidden;">
+            <div id="zohoProgBar" style="background:var(--grad);height:100%;width:0%;transition:width .3s;"></div>
+        </div>
+        <p id="zohoProgText" style="margin-top:6px;font-size:12px;color:var(--gray-light);"></p>
+    </div>
     <p class="muted" style="margin-top:10px;">Last status: {{ last_status }}</p>
 
     <div style="border-top:1px solid var(--dark3);margin-top:18px;padding-top:16px;">
@@ -173,10 +179,29 @@ function testZoho(){
         msg((d.ok?'✓ ':'✗ ')+(d.message||d.error||''),d.ok);});
 }
 function syncZoho(){
-    msg('Syncing from Zoho…',true);
+    msg('Starting…',true);
+    document.getElementById('zohoProgWrap').style.display='block';
+    document.getElementById('zohoProgBar').style.width='4%';
+    document.getElementById('zohoProgText').textContent='Starting…';
     fetch('/settings/zoho/sync',{method:'POST'}).then(r=>r.json()).then(d=>{
-        if(d.ok)msg(`✓ Synced ${d.count} vendors · ${d.updated_rows} row names updated.`,true);
-        else msg('✗ '+(d.error||'Sync failed'),false);});
+        if(!d.ok){msg('✗ '+(d.error||'Sync failed'),false);document.getElementById('zohoProgWrap').style.display='none';return;}
+        pollZohoSync();
+    });
+}
+function pollZohoSync(){
+    fetch('/settings/zoho/sync-status').then(r=>r.json()).then(d=>{
+        const bar=document.getElementById('zohoProgBar'), txt=document.getElementById('zohoProgText');
+        if(d.done){
+            document.getElementById('zohoProgWrap').style.display='none';
+            if(d.ok){const r=d.result||{};msg(`✓ Synced ${r.count||0} vendors · ${r.updated_rows||0} row names updated.`,true);}
+            else msg('✗ '+(d.error||'Sync failed'),false);
+            return;
+        }
+        const pct=Math.min(95, 10+d.page*15);
+        bar.style.width=pct+'%';
+        txt.textContent=d.phase+(d.page?` (page ${d.page}, ${d.vendors_so_far} vendors so far)`:'');
+        setTimeout(pollZohoSync, 800);
+    });
 }
 function exchangeZohoCode(){
     const code=document.getElementById('zohoCode').value.trim();

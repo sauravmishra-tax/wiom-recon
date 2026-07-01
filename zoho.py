@@ -68,8 +68,9 @@ def get_access_token(client_id, client_secret, refresh_token, region='in'):
     return tok
 
 
-def fetch_vendors(access_token, org_id, region='in'):
-    """Page through Zoho Books contacts and return [{gstin, name, state}]."""
+def fetch_vendors(access_token, org_id, region='in', progress_cb=None):
+    """Page through Zoho Books contacts and return [{gstin, name, state}].
+    progress_cb(page, vendors_so_far), if given, is called after each page."""
     _, api = _domains(region)
     headers = {'Authorization': f'Zoho-oauthtoken {access_token}'}
     vendors, page = [], 1
@@ -86,6 +87,8 @@ def fetch_vendors(access_token, org_id, region='in'):
             vendors.append({'gstin': gstin, 'name': name,
                             'email': (c.get('email') or '').strip(),
                             'state': (c.get('place_of_contact') or '').strip()})
+        if progress_cb:
+            progress_cb(page, len(vendors))
         pc = out.get('page_context', {})
         if not pc.get('has_more_page'):
             break

@@ -1144,19 +1144,30 @@ def _zoho_configured():
     return all([c['client_id'], c['client_secret'], c['refresh_token'], c['org_id']])
 
 
-def sync_zoho_master():
+zoho_sync_state = {'active': False, 'phase': '', 'page': 0, 'vendors_so_far': 0,
+                    'done': False, 'ok': None, 'error': None, 'result': None}
+
+
+def sync_zoho_master(progress_cb=None):
     """Fetch vendors from Zoho Books -> upsert VendorMaster + backfill row names.
     Returns dict {ok, count, updated_rows, error}."""
     c = _zoho_creds()
     try:
+        if progress_cb:
+            progress_cb(phase='Getting access token…')
         tok = zoho.get_access_token(c['client_id'], c['client_secret'],
                                     c['refresh_token'], c['region'])
-        vendors = zoho.fetch_vendors(tok, c['org_id'], c['region'])
+        if progress_cb:
+            progress_cb(phase='Fetching vendors from Zoho…')
+        page_cb = (lambda page, n: progress_cb(phase='Fetching vendors from Zoho…', page=page, vendors_so_far=n)) if progress_cb else None
+        vendors = zoho.fetch_vendors(tok, c['org_id'], c['region'], progress_cb=page_cb)
     except Exception as e:
         set_setting('zoho_last_status', f'error: {e}')
         db.session.commit()
         return {'ok': False, 'error': str(e)}
 
+    if progress_cb:
+        progress_cb(phase=f'Updating {len(vendors)} vendors in master…')
     from state_codes import state_from_gstin
     updated_rows = 0
     for v in vendors:
@@ -1279,7 +1290,44 @@ def test_zoho():
 def sync_zoho():
     if not _zoho_configured():
         return jsonify({'ok': False, 'error': 'Enter all credentials first.'})
-    return jsonify(sync_zoho_master())
+    if zoho_sync_state['active']:
+        return jsonify({'ok': False, 'error': 'A sync is already running.'})
+
+    zoho_sync_state.update({'active': True, 'phase': 'Starting…', 'page': 0,
+                            'vendors_so_far': 0, 'done': False, 'ok': None,
+                            'error': None, 'result': None})
+
+    def progress_cb(phase=None, page=None, vendors_so_far=None):
+        if phase is not None:
+            zoho_sync_state['phase'] = phase
+        if page is not None:
+            zoho_sync_state['page'] = page
+        if vendors_so_far is not None:
+            zoho_sync_state['vendors_so_far'] = vendors_so_far
+
+    def run():
+        with app.app_context():
+            try:
+                result = sync_zoho_master(progress_cb=progress_cb)
+                zoho_sync_state['ok'] = result.get('ok')
+                zoho_sync_state['result'] = result
+                if not result.get('ok'):
+                    zoho_sync_state['error'] = result.get('error')
+            except Exception as e:
+                zoho_sync_state['ok'] = False
+                zoho_sync_state['error'] = str(e)
+            finally:
+                zoho_sync_state['active'] = False
+                zoho_sync_state['done'] = True
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({'ok': True, 'started': True})
+
+
+@app.route('/settings/zoho/sync-status')
+@superadmin_required
+def zoho_sync_status():
+    return jsonify(zoho_sync_state)
 
 
 # ======================================================================
