@@ -103,11 +103,11 @@ def _start_scheduler(app):
     def daily_slack():
         with app.app_context():
             day = get_setting('slack_send_day', '*') or '*'   # '*' = every day, or a day-of-month
-            if not get_setting('slack_webhook'):
+            if not get_setting('slack_webhook') and not get_setting('slack_bot_token'):
                 return
             if day == '*' or str(now_ist().day) == str(day):
                 ok, msg = _send_slack_report()
-                print(f"  [scheduler] Daily Slack report: {ok} — {msg}")
+                print(f"  [scheduler] Daily Slack CFO summary: {ok} — {msg}")
 
     import pytz
     ist = pytz.timezone('Asia/Kolkata')
@@ -136,16 +136,15 @@ def _start_scheduler(app):
                     print(f'  [reminder] email failed: {e}')
 
     sched.add_job(monthly_cfo, 'cron', hour=9, minute=0, id='monthly_cfo')
-    sched.add_job(daily_slack, 'cron', hour=9, minute=30, id='daily_slack')
+    sched.add_job(daily_slack, 'cron', hour=18, minute=0, day_of_week='mon-fri', id='daily_slack')
     sched.add_job(approval_reminder, 'cron', hour=8, minute=30, id='approval_reminder')
 
     # Slack Bot daily jobs
     import slack_notify
-    sched.add_job(slack_notify.notify_pending_summary, 'cron', hour=7,  minute=0, id='slack_pending')
-    sched.add_job(slack_notify.notify_cfo_summary,     'cron', hour=19, minute=0, id='slack_cfo')
+    sched.add_job(slack_notify.notify_pending_summary, 'cron', hour=7, minute=0, id='slack_pending')
 
     sched.start()
-    print("  [scheduler] Started — Slack pending @7:00 IST, Slack CFO summary @19:00 IST")
+    print("  [scheduler] Started — Slack pending @7:00 IST, CFO Summary image @18:00 IST (Mon-Fri)")
     return app
 
 
@@ -3312,8 +3311,7 @@ if __name__ == '__main__':
     from apscheduler.schedulers.background import BackgroundScheduler
     import pytz
     scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Kolkata'))
-    scheduler.add_job(slack_notify.notify_pending_summary, 'cron', hour=7,  minute=0)
-    scheduler.add_job(slack_notify.notify_cfo_summary,     'cron', hour=19, minute=0)
+    scheduler.add_job(slack_notify.notify_pending_summary, 'cron', hour=7, minute=0)
     scheduler.start()
 
     # Optional port override from CLI (used by the preview launcher)
