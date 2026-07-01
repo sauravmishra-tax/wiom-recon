@@ -1368,12 +1368,18 @@ def _send_slack_report():
         return False, 'Slack not configured — add a Bot Token + Channel, or a Webhook URL.'
     rows = ReconRow.query.all()
     ctx = _cfo_context(rows, None)
-    blocks = slack_util.build_cfo_summary_blocks(
-        f"WIOM GST Recon — Controller Summary ({now_ist().strftime('%d-%b-%Y')})", ctx)
+    title = f"WIOM GST Recon — Controller Summary ({now_ist().strftime('%d-%b-%Y')})"
+    if bot_token and channel:
+        try:
+            img_bytes = slack_util.render_cfo_summary_image(title, ctx)
+            return slack_util.upload_image_bot(
+                bot_token, channel, img_bytes,
+                f"cfo_summary_{now_ist().strftime('%Y%m%d')}.png", title)
+        except Exception as e:
+            return False, f'Image render/upload failed: {e}'
+    blocks = slack_util.build_cfo_summary_blocks(title, ctx)
     text = (f"WIOM GST Recon: ITC at risk ₹{ctx['itc_risk']:,}, "
             f"{ctx['total']} total rows, {ctx['done']} done / {ctx['pending']} pending")
-    if bot_token and channel:
-        return slack_util.post_message_bot(bot_token, channel, text, blocks)
     return slack_util.post_message(url, text, blocks)
 
 
