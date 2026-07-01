@@ -72,9 +72,10 @@
             <div><label>From address</label><input name="from_addr" value="{{ smtp_from }}" placeholder="defaults to username"></div>
             <div><label style="display:flex;gap:6px;align-items:center;margin-top:22px;"><input type="checkbox" name="use_tls" style="width:auto;" {{ 'checked' if smtp_tls }}> Use TLS</label></div>
         </div>
-        <div style="border-top:1px solid var(--dark3);margin:16px 0;padding-top:14px;display:grid;grid-template-columns:2fr 1fr;gap:14px;">
-            <div><label>CFO recipient(s) for monthly summary</label><input name="cfo_email" value="{{ cfo_email }}" placeholder="cfo@wiom.in, akash.jain@wiom.in"></div>
-            <div><label>Auto-send day of month</label><input name="cfo_send_day" value="{{ cfo_send_day }}" placeholder="1"></div>
+        <div style="border-top:1px solid var(--dark3);margin:16px 0;padding-top:14px;">
+            <label>Recipient(s) for Summary Report</label>
+            <input name="cfo_email" value="{{ cfo_email }}" placeholder="cfo@wiom.in, akash.jain@wiom.in">
+            <input type="hidden" name="cfo_send_day" value="{{ cfo_send_day }}">
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <button class="btn" type="submit">💾 Save</button>
@@ -83,6 +84,7 @@
         </div>
     </form>
     <div id="smtpMsg" style="margin-top:12px;font-size:13px;font-weight:600;"></div>
+    <p class="muted" style="margin-top:8px;">Summary Report auto-sends daily at 10:45 AM IST, Monday–Friday (skips Sat/Sun) + on-demand via the button above.</p>
   </div>
   <!-- GSTR-2B SOURCE / GSP -->
   <div class="card">

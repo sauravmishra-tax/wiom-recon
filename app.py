@@ -82,23 +82,19 @@ def create_app():
 
 
 def _start_scheduler(app):
-    """Monthly CFO-summary email (feature 7). Best-effort: only fires while the
-    app is running. Sends on the configured day-of-month at 09:00 IST."""
+    """Summary Report email (feature 7). Best-effort: only fires while the
+    app is running. Sends daily at 10:45 IST, Monday-Friday."""
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
     except ImportError:
-        print("  [scheduler] apscheduler not installed — monthly CFO email disabled (manual send still works).")
+        print("  [scheduler] apscheduler not installed — Summary Report email disabled (manual send still works).")
         return
 
-    def monthly_cfo():
+    def daily_cfo_email():
         with app.app_context():
-            try:
-                day = int(get_setting('cfo_send_day', '1') or '1')
-            except ValueError:
-                day = 1
-            if now_ist().day == day and _smtp_configured() and get_setting('cfo_email'):
+            if _smtp_configured() and get_setting('cfo_email'):
                 ok, msg = _send_cfo_email()
-                print(f"  [scheduler] Monthly CFO email: {ok} — {msg}")
+                print(f"  [scheduler] Daily Summary Report email: {ok} — {msg}")
 
     def daily_slack():
         with app.app_context():
@@ -135,7 +131,7 @@ def _start_scheduler(app):
                 except Exception as e:
                     print(f'  [reminder] email failed: {e}')
 
-    sched.add_job(monthly_cfo, 'cron', hour=9, minute=0, id='monthly_cfo')
+    sched.add_job(daily_cfo_email, 'cron', hour=10, minute=45, day_of_week='mon-fri', id='daily_cfo_email')
     sched.add_job(daily_slack, 'cron', hour=18, minute=0, day_of_week='mon-fri', id='daily_slack')
     sched.add_job(approval_reminder, 'cron', hour=8, minute=30, id='approval_reminder')
 
@@ -144,7 +140,7 @@ def _start_scheduler(app):
     sched.add_job(slack_notify.notify_pending_summary, 'cron', hour=7, minute=0, id='slack_pending')
 
     sched.start()
-    print("  [scheduler] Started — Slack pending @7:00 IST, Summary Report image @18:00 IST (Mon-Fri)")
+    print("  [scheduler] Started — Slack pending @7:00 IST, Summary Report email @10:45 IST + Slack image @18:00 IST (Mon-Fri)")
     return app
 
 
