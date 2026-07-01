@@ -1367,30 +1367,11 @@ def _send_slack_report():
     if not bot_token and not url:
         return False, 'Slack not configured — add a Bot Token + Channel, or a Webhook URL.'
     rows = ReconRow.query.all()
-    stats = _summary_stats_all()
-    bd = _breakdown_data(rows)
-    gap = gap_from_rows(rows)
-    # state-wise gap
-    st = {}
-    for r in rows:
-        s = st.setdefault(r.state_name, {'c': 0, 'v': 0.0})
-        s['c'] += 1; s['v'] += r.total_diff or 0
-    by_state = [(k, v['c'], v['v']) for k, v in sorted(st.items())]
-    by_reason = [(k, v['count'], v['value']) for k, v in list(bd['by_reason'].items())[:6]]
-    worst = sorted([g for g in gap if g['b_cnt'] and not g['g_cnt'] or g['risk'] in ('CRITICAL', 'HIGH')],
-                   key=lambda g: -g['total_gap'])[:5]
-    top_vendors = [(g['gstin'], (g['vendor'] or '')[:28], g['risk'],
-                    (g['b_tax'] if g['b_cnt'] and not g['g_cnt'] else abs(g['total_gap'])))
-                   for g in worst]
-    kpis = [
-        ('ITC at risk', f"₹{stats['itc_risk']:,}"),
-        ('Total rows', f"{stats['total']:,}"),
-        ('Open / Remarked / Done', f"{stats['open']} / {stats['remarked']} / {stats['done']}"),
-    ]
-    blocks = slack_util.build_report_blocks(
-        f"WIOM GST Recon — Daily Status ({now_ist().strftime('%d-%b-%Y')})",
-        kpis, by_state, by_reason, top_vendors)
-    text = f"WIOM GST Recon daily: ITC at risk ₹{stats['itc_risk']:,}, {stats['open']} open, {stats['done']} resolved"
+    ctx = _cfo_context(rows, None)
+    blocks = slack_util.build_cfo_summary_blocks(
+        f"WIOM GST Recon — Controller Summary ({now_ist().strftime('%d-%b-%Y')})", ctx)
+    text = (f"WIOM GST Recon: ITC at risk ₹{ctx['itc_risk']:,}, "
+            f"{ctx['total']} total rows, {ctx['done']} done / {ctx['pending']} pending")
     if bot_token and channel:
         return slack_util.post_message_bot(bot_token, channel, text, blocks)
     return slack_util.post_message(url, text, blocks)

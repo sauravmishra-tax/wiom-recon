@@ -48,6 +48,37 @@ def post_message_bot(bot_token, channel, text, blocks=None):
         return False, str(e)
 
 
+def build_cfo_summary_blocks(title, ctx):
+    """Build Slack blocks mirroring the /cfo-summary page: State Health + Reconciliation Summary."""
+    def section(md):
+        return {'type': 'section', 'text': {'type': 'mrkdwn', 'text': md}}
+    dot = {'red': '🔴', 'yellow': '🟡', 'green': '🟢', 'grey': '⚪'}
+
+    blocks = [{'type': 'header', 'text': {'type': 'plain_text', 'text': f'📊 {title}'}}]
+
+    if ctx.get('state_health'):
+        blocks.append(section('*🚦 State Health Status*\n' + '\n'.join(
+            f"{dot.get(s['light'], '⚪')} *{s['state']}* — ⚠️ {s['open']} open · 💬 {s['remarked']} remarked · "
+            f"✅ {s['approved']} done · ITC risk ₹{s['itc_risk']:,} · last upload {s['last_upload']}"
+            for s in ctx['state_health'])))
+
+    rs = ctx.get('recon_summary', {})
+    blocks.append(section(
+        '*📋 Reconciliation Summary*\n'
+        f"🔗 Expert Cross-Match: *{rs.get('cross', 0)}* · ₹{rs.get('cross_amt', 0):,}\n"
+        f"📕 Books Only: *{ctx.get('books_only', 0)}* · ₹{rs.get('books_amt', 0):,} (ITC at risk)\n"
+        f"🧾 GSTR-2B Only: *{ctx.get('gstn_only', 0)}* · ₹{rs.get('gstn_amt', 0):,} (unbooked)\n"
+        f"✅ Fully Reconciled: *{ctx.get('fully', 0)}* · ₹{rs.get('fully_amt', 0):,} (ITC safe)\n"
+        f"🚫 Rejected — ITC Ineligible: *{ctx.get('rejected', 0)}* · ₹{rs.get('rejected_amt', 0):,}\n"
+        f"📊 GSTIN Gap Analysis: *{rs.get('gap', 0)}* · ₹{rs.get('gap_amt', 0):,} (net gap)\n"
+        f"🧾 Total Invoice Rows: *{ctx.get('total', 0):,}*"
+    ))
+
+    blocks.append({'type': 'context', 'elements': [
+        {'type': 'mrkdwn', 'text': 'WIOM GST Recon · Books × GST · auto-generated'}]})
+    return blocks
+
+
 def build_report_blocks(title, kpis, by_state, by_reason, top_vendors):
     """Build a tidy Slack Block-Kit message for the daily recon report.
     kpis: list of (label, value). by_state/by_reason: list of (name, count, value).
