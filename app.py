@@ -3115,6 +3115,50 @@ def _cfo_context(rows, state):
             s['risk'] += tax(r, 'b')
     done = sum(1 for r in rows if r.status in ('approved', 'resolved'))
     rejected = sum(1 for r in rows if r.status == 'rejected')
+
+    # ---- Reconciliation Summary tiles (mirrors dashboard /api/counts) ----
+    cross_rows = [r for r in matched if 'Fully Reconciled' not in (r.recon_status or '')]
+    books_only_rows = [r for r in rows if r.category == 'books_only' and r.status != 'rejected']
+    gstn_only_rows = [r for r in rows if r.category == 'gstn_only' and r.status != 'rejected']
+    fully_rows = [r for r in matched if 'Fully Reconciled' in (r.recon_status or '')]
+    rejected_rows = [r for r in rows if r.status == 'rejected']
+    recon_summary = dict(
+        cross=len(cross_rows), cross_amt=round(sum(r.books_total or 0 for r in cross_rows)),
+        books_amt=round(sum(r.books_total or 0 for r in books_only_rows)),
+        gstn_amt=round(sum(r.gstn_total or 0 for r in gstn_only_rows)),
+        fully_amt=round(sum(r.books_total or 0 for r in fully_rows)),
+        rejected_amt=round(sum(r.gstn_total or 0 for r in rejected_rows)),
+        gap=len({r.gstin for r in rows}),
+        gap_amt=round(sum(r.total_diff or 0 for r in rows)),
+    )
+
+    # ---- State Health Status (mirrors dashboard /api/dashboard-state-health) ----
+    state_health = []
+    states_scope = [state] if state and state != 'all' else sorted({r.state_name for r in rows} | set(WIOM_STATES))
+    for s in states_scope:
+        s_rows = [r for r in rows if r.state_name == s]
+        total_s = len(s_rows)
+        open_n = sum(1 for r in s_rows if r.status == 'open')
+        remarked_n = sum(1 for r in s_rows if r.status == 'remarked')
+        approved_n = sum(1 for r in s_rows if r.status in ('approved', 'resolved'))
+        itc_risk_s = sum(tax(r, 'b') for r in s_rows if r.category == 'books_only')
+        last_run = ReconRun.query.filter(ReconRun.state == s, ReconRun.archived != True)\
+            .order_by(ReconRun.created_at.desc()).first()
+        if total_s == 0:
+            light = 'grey'
+        elif open_n == 0 and remarked_n == 0:
+            light = 'green'
+        elif open_n == 0:
+            light = 'yellow'
+        else:
+            light = 'red'
+        state_health.append(dict(
+            state=s, total=total_s, open=open_n, remarked=remarked_n, approved=approved_n,
+            itc_risk=round(itc_risk_s), light=light,
+            last_upload=last_run.created_at.strftime('%d-%b-%Y') if last_run else 'Never',
+            last_period=last_run.period if last_run else None,
+        ))
+
     return dict(
         scope=(state if state and state != 'all' else 'All States'),
         generated=now_ist().strftime('%d-%b-%Y %H:%M'),
@@ -3126,7 +3170,8 @@ def _cfo_context(rows, state):
         rejected=rejected,
         by_state={k: {'rows': v['rows'], 'gap': round(v['gap']), 'risk': round(v['risk'])}
                   for k, v in sorted(by_state.items())},
-        top_gaps=gap[:10], breakdown=_breakdown_data(rows))
+        top_gaps=gap[:10], breakdown=_breakdown_data(rows),
+        recon_summary=recon_summary, state_health=state_health)
 
 
 @app.route('/cfo-summary')

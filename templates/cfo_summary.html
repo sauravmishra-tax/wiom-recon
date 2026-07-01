@@ -61,11 +61,46 @@
   .risk-CRITICAL{color:#d61f3a;font-weight:800;}.risk-HIGH{color:#d9700f;font-weight:700;}.risk-MEDIUM{color:#b8860b;}.risk-LOW{color:#0b9d63;}
 
   .print-btn{position:fixed;top:20px;right:20px;background:linear-gradient(135deg,#E0119D,#7C5CFF);color:#fff;border:none;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;box-shadow:0 4px 14px rgba(224,17,157,.3);}
+
+  /* State Health Status */
+  .health-card{background:#fff;border:1px solid #e4e7f0;border-radius:16px;padding:20px;margin-bottom:16px;}
+  .health-card h3{font-size:16px;display:flex;align-items:center;gap:8px;margin-bottom:16px;}
+  .health-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+  .health-tile{background:#f4f6f9;border:1px solid #e4e7f0;border-radius:12px;padding:14px 16px;position:relative;}
+  .health-tile .hh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .health-tile .hname{font-weight:700;font-size:14px;}
+  .health-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
+  .health-dot.red{background:radial-gradient(circle at 30% 30%,#ff6b81,#d61f3a);}
+  .health-dot.yellow{background:radial-gradient(circle at 30% 30%,#ffe17a,#d9a70f);}
+  .health-dot.green{background:radial-gradient(circle at 30% 30%,#6be8ab,#0b9d63);}
+  .health-dot.grey{background:radial-gradient(circle at 30% 30%,#e6e6ef,#c3c3d3);}
+  .health-tile .hline{font-size:12px;color:#4a4a5c;margin-bottom:6px;}
+  .health-tile .hitc{font-size:12px;color:#4a4a5c;margin-bottom:4px;}
+  .health-tile .hitc b{color:#d61f3a;}
+  .health-tile .hupload{font-size:11px;color:#8a8aa8;}
+
+  /* Reconciliation Summary */
+  .recon-card{background:#fff;border:1px solid #e4e7f0;border-radius:16px;padding:20px;margin-bottom:16px;}
+  .recon-card h3{font-size:16px;margin-bottom:14px;}
+  .recon-card h3 span{font-weight:500;font-size:12px;color:#8a8aa8;}
+  .stackbar{display:flex;border-radius:10px;overflow:hidden;height:34px;margin-bottom:16px;font-size:11.5px;font-weight:700;color:#fff;}
+  .stackbar>div{display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;padding:0 8px;}
+  .stackbar .total-seg{background:#eef0f6;color:#6a7080;margin-left:auto;flex-grow:0;padding:0 16px;}
+  .recon-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;}
+  .recon-tile{background:#f4f6f9;border:1px solid #e4e7f0;border-radius:12px;padding:14px;}
+  .recon-tile .rv{font-size:24px;font-weight:800;font-family:'Sora';color:#15171f;}
+  .recon-tile .rl{font-size:11.5px;color:#4a4a5c;margin-top:4px;}
+  .recon-tile .ra{font-size:13px;font-weight:700;margin-top:8px;color:#15171f;}
+  .recon-tile .rs{font-size:10.5px;color:#8a8aa8;}
   .footer{margin-top:24px;font-size:11px;color:#aaa;text-align:center;line-height:1.8;}
 
   @media print{
     body{background:#fff;padding:0;}
     .print-btn{display:none;}
+  }
+  @media(max-width:1000px){
+    .health-grid{grid-template-columns:repeat(2,1fr);}
+    .recon-grid{grid-template-columns:repeat(3,1fr);}
   }
 </style>
 </head>
@@ -84,6 +119,55 @@
     <b>{{ scope }}</b><br>
     Cumulative to date<br>
     Generated {{ generated }}
+  </div>
+</div>
+
+<!-- State Health Status -->
+<div class="health-card">
+  <h3>🚦 State Health Status</h3>
+  <div class="health-grid">
+  {% for s in state_health %}
+    <div class="health-tile">
+      <div class="hh"><span class="hname">{{ s.state }}</span><span class="health-dot {{ s.light }}"></span></div>
+      <div class="hline">⚠️ {{ s.open }} open · 💬 {{ s.remarked }} remarked · ✅ {{ s.approved }} done</div>
+      <div class="hitc">ITC risk: <b>₹{{ '{:,}'.format(s.itc_risk) }}</b></div>
+      <div class="hupload">Last upload: {{ s.last_upload }}{% if s.last_period %} ({{ s.last_period }}){% endif %}</div>
+    </div>
+  {% endfor %}
+  </div>
+</div>
+
+<!-- Reconciliation Summary -->
+<div class="recon-card">
+  <h3>📋 Reconciliation Summary</h3>
+  <div class="stackbar">
+    {% set nb_pct = (books_only / total * 100) if total else 0 %}
+    {% set ng_pct = (gstn_only / total * 100) if total else 0 %}
+    {% set fr_pct = (fully / total * 100) if total else 0 %}
+    {% if nb_pct > 0 %}<div style="width:{{ nb_pct }}%;background:#E0119D;">Not in Books {{ books_only }}</div>{% endif %}
+    {% if ng_pct > 0 %}<div style="width:{{ ng_pct }}%;background:#2270d8;">Not in GSTR-2B {{ gstn_only }}</div>{% endif %}
+    {% if fr_pct > 0 %}<div style="width:{{ fr_pct }}%;background:#0b9d63;">Fully Reconciled {{ fully }}</div>{% endif %}
+    <div class="total-seg">Total {{ '{:,}'.format(total) }}</div>
+  </div>
+  <div class="recon-grid">
+    <div class="recon-tile"><div class="rv" style="color:#0b9d63;">{{ recon_summary.cross }}</div>
+      <div class="rl">🔗 Expert Cross-Match</div>
+      <div class="ra">₹{{ '{:,}'.format(recon_summary.cross_amt) }}</div><div class="rs">Books value</div></div>
+    <div class="recon-tile"><div class="rv" style="color:#E0119D;">{{ books_only }}</div>
+      <div class="rl">📕 Books Only</div>
+      <div class="ra">₹{{ '{:,}'.format(recon_summary.books_amt) }}</div><div class="rs">In books, ITC at risk</div></div>
+    <div class="recon-tile"><div class="rv" style="color:#2270d8;">{{ gstn_only }}</div>
+      <div class="rl">🧾 GSTR-2B Only</div>
+      <div class="ra">₹{{ '{:,}'.format(recon_summary.gstn_amt) }}</div><div class="rs">In 2B, unbooked</div></div>
+    <div class="recon-tile"><div class="rv" style="color:#0b9d63;">{{ fully }}</div>
+      <div class="rl">✅ Fully Reconciled</div>
+      <div class="ra">₹{{ '{:,}'.format(recon_summary.fully_amt) }}</div><div class="rs">ITC safe</div></div>
+    <div class="recon-tile"><div class="rv" style="color:#d61f3a;">{{ rejected or 0 }}</div>
+      <div class="rl">🚫 Rejected — ITC Ineligible</div>
+      <div class="ra">₹{{ '{:,}'.format(recon_summary.rejected_amt) }}</div><div class="rs">Marked ineligible</div></div>
+    <div class="recon-tile"><div class="rv" style="color:#d9700f;">{{ recon_summary.gap }}</div>
+      <div class="rl">📊 GSTIN Gap Analysis</div>
+      <div class="ra">₹{{ '{:,}'.format(recon_summary.gap_amt) }}</div><div class="rs">Net Books−2B gap</div></div>
   </div>
 </div>
 
