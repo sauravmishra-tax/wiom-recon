@@ -197,9 +197,11 @@ function pollZohoSync(){
             else msg('✗ '+(d.error||'Sync failed'),false);
             return;
         }
-        const pct=Math.min(95, 10+d.page*15);
-        bar.style.width=pct+'%';
-        txt.textContent=d.phase+(d.page?` (page ${d.page}, ${d.vendors_so_far} vendors so far)`:'');
+        // No known total page count up front, so use a decaying approach-95%
+        // curve (keeps moving, never looks frozen, never falsely hits 100%).
+        const pct=95*(1-Math.exp(-(d.page||0)/12));
+        bar.style.width=Math.max(4,pct)+'%';
+        txt.textContent=d.phase+(d.page?` — page ${d.page}, ${d.vendors_so_far} vendors with GSTIN found so far (still scanning contacts)`:'');
         setTimeout(pollZohoSync, 800);
     });
 }
