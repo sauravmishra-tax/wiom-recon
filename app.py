@@ -49,7 +49,6 @@ from auth import login_manager, auth_bp, admin_required, superadmin_required, wr
 from persist import persist_run, derive_period, derive_period_from_file
 from state_codes import STATE_CODES, WIOM_STATES
 import zoho
-import slack_notify
 
 from agents import agent_1_validator
 from agents import agent_2_vendor_resolver
@@ -135,12 +134,8 @@ def _start_scheduler(app):
     sched.add_job(daily_slack, 'cron', hour=18, minute=0, day_of_week='mon-fri', id='daily_slack')
     sched.add_job(approval_reminder, 'cron', hour=8, minute=30, id='approval_reminder')
 
-    # Slack Bot daily jobs
-    import slack_notify
-    sched.add_job(slack_notify.notify_pending_summary, 'cron', hour=7, minute=0, id='slack_pending')
-
     sched.start()
-    print("  [scheduler] Started — Slack pending @7:00 IST, Summary Report email @10:45 IST + Slack image @18:00 IST (Mon-Fri)")
+    print("  [scheduler] Started — Summary Report email @10:45 IST + Slack image @18:00 IST (Mon-Fri)")
     return app
 
 
@@ -3385,13 +3380,6 @@ def _summary_stats(user):
 
 
 if __name__ == '__main__':
-    # Daily Slack summary at 7:00 AM IST
-    from apscheduler.schedulers.background import BackgroundScheduler
-    import pytz
-    scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Kolkata'))
-    scheduler.add_job(slack_notify.notify_pending_summary, 'cron', hour=7, minute=0)
-    scheduler.start()
-
     # Optional port override from CLI (used by the preview launcher)
     port = Config.PORT
     if len(sys.argv) > 1 and sys.argv[1].isdigit():
