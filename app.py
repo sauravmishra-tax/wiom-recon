@@ -2979,14 +2979,7 @@ def bulk_remark_template():
     from openpyxl.styles import PatternFill, Font
     period = request.args.get('period', '')
     state = request.args.get('state', '')
-    q = ReconRow.query
-    if period:
-        q = q.filter(ReconRow.period == period)
-    if state:
-        q = q.filter(ReconRow.state_name == state)
-    if not current_user.is_admin and current_user.state_list():
-        q = q.filter(ReconRow.state_name.in_(current_user.state_list()))
-    rows = q.order_by(ReconRow.state_name, ReconRow.gstin).limit(5000).all()
+    rows = _filtered_rows_query().order_by(ReconRow.state_name, ReconRow.gstin).limit(5000).all()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Bulk Remarks'

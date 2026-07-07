@@ -986,16 +986,18 @@ function sendVendorLevelEmail(){
     });
 }
 function v(id){return document.getElementById(id).value;}
+// Always exports the FULL dataset (all categories/tabs) — only Period/State/FY
+// filters apply. It should never be scoped to whichever tab happens to be open.
 function exportXl(){
-    const tab=TABS[activeTab];
-    const q=new URLSearchParams({...baseParams(),status:v('fStatus'),...(tab.gap?{}:(tab.api||{}))});
+    const q=new URLSearchParams(baseParams());
     window.location='/export?'+q;
 }
 
-// Bulk Remark Excel download
+// Bulk Remark Excel download — same filters as the currently active tab
 function dlBulkTemplate(){
-    const p=baseParams();
-    window.location='/api/bulk-remark/template?period='+encodeURIComponent(p.period||'')+'&state='+encodeURIComponent(p.state||'');
+    const tab=TABS[activeTab];
+    const q=new URLSearchParams({...baseParams(),status:v('fStatus'),...(tab.gap?{}:(tab.api||{}))});
+    window.location='/api/bulk-remark/template?'+q;
 }
 
 // Bulk Remark Excel upload
