@@ -412,14 +412,21 @@ def run_reconciliation(file_path, period, label, user_id, run_state=None):
                 add_log(0, f'Smart re-upload: replaced previous {run_state} snapshot, '
                            f'carried over remarks/status on {carried} matching invoices')
 
-            # Auto-sync vendor master from Zoho if configured (best-effort)
+            # Auto-sync vendor master from Zoho if configured (best-effort).
+            # Runs in its own thread so a slow/large Zoho contact list never
+            # blocks the upload from finishing — it can take minutes to page
+            # through thousands of contacts.
             if _zoho_configured():
-                try:
-                    res = sync_zoho_master()
-                    if res.get('ok'):
-                        add_log(0, f"Zoho auto-sync: {res['count']} vendors, {res['updated_rows']} names updated")
-                except Exception as e:
-                    add_log(0, f"Zoho auto-sync skipped: {e}")
+                add_log(0, 'Zoho auto-sync started in the background (will not block this upload)…')
+                def _bg_zoho_sync():
+                    with app.app_context():
+                        try:
+                            res = sync_zoho_master()
+                            if res.get('ok'):
+                                print(f"[zoho auto-sync] {res['count']} vendors, {res['updated_rows']} names updated")
+                        except Exception as e:
+                            print(f"[zoho auto-sync] skipped: {e}")
+                threading.Thread(target=_bg_zoho_sync, daemon=True).start()
 
             processing_state['run_id'] = run.id
             processing_state['output_file'] = output_file
