@@ -993,10 +993,10 @@ function exportXl(){
     window.location='/export?'+q;
 }
 
-// Bulk Remark Excel download — same filters as the currently active tab
+// Bulk Remark Excel download — ALL categories (Books/GSTN/Cross-Match), only rows
+// still needing action (open/remarked/rejected — excludes approved/resolved).
 function dlBulkTemplate(){
-    const tab=TABS[activeTab];
-    const q=new URLSearchParams({...baseParams(),status:v('fStatus'),...(tab.gap?{}:(tab.api||{}))});
+    const q=new URLSearchParams(baseParams());
     window.location='/api/bulk-remark/template?'+q;
 }
 

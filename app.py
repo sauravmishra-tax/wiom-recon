@@ -2979,7 +2979,9 @@ def bulk_remark_template():
     from openpyxl.styles import PatternFill, Font
     period = request.args.get('period', '')
     state = request.args.get('state', '')
-    rows = _filtered_rows_query().order_by(ReconRow.state_name, ReconRow.gstin).limit(5000).all()
+    # Only rows still needing action — skip already approved/resolved ones.
+    q = _filtered_rows_query().filter(ReconRow.status.in_(['open', 'remarked', 'rejected']))
+    rows = q.order_by(ReconRow.state_name, ReconRow.gstin).limit(5000).all()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Bulk Remarks'
