@@ -395,7 +395,7 @@ def run_reconciliation(file_path, period, label, user_id, run_state=None):
                                 r3['gstn_unmatched'], vendor_map=r2['vendor_map'],
                                 gst_cache=r2.get('gst_cache', {}), run_state=run_state,
                                 reconciled_dfs=reconciled_dfs)
-                log_audit(None, current_user, 'upload',
+                log_audit(None, user_obj, 'upload',
                           'file_upload', '',
                           f'State: {run_state} | Period: {run.period} | Rows: {n} | Run ID: {run.id}')
                 db.session.commit()
