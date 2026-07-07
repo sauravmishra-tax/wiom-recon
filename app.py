@@ -3381,11 +3381,12 @@ def _summary_stats(user):
     open_n = q.filter(ReconRow.status == 'open').count()
     remarked = q.filter(ReconRow.status == 'remarked').count()
     done = q.filter(ReconRow.status.in_(['approved', 'resolved'])).count()
+    rejected = q.filter(ReconRow.status == 'rejected').count()
     itc = 0.0
     for r in q.filter(ReconRow.category == 'books_only').all():
         itc += (r.books_igst or 0) + (r.books_cgst or 0) + (r.books_sgst or 0)
     return {'total': total, 'open': open_n, 'remarked': remarked, 'done': done,
-            'itc_risk': round(itc)}
+            'rejected': rejected, 'itc_risk': round(itc)}
 
 
 if __name__ == '__main__':

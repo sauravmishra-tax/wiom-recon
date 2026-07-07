@@ -295,7 +295,7 @@
     </div>
 </div>
 
-<div class="stat-grid" style="margin-bottom:16px;grid-template-columns:repeat(5,1fr);">
+<div class="stat-grid" style="margin-bottom:16px;grid-template-columns:repeat(6,1fr);">
     <a href="{{ url_for('detail') }}?tab=books" style="text-decoration:none;">
     <div class="kpi" style="border-color:var(--red);cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">⚠️</div><div class="n tnum red" style="color:var(--red);font-size:24px;">₹<span id="itcRisk">{{ '{:,}'.format(stats.itc_risk) }}</span></div><div class="l">ITC at risk (Books≠2B)</div><div style="font-size:10px;color:var(--pink);margin-top:4px;">Click → Books Only tab</div></div>
     </a>
@@ -310,6 +310,9 @@
     </a>
     <a href="{{ url_for('detail') }}?status=approved" style="text-decoration:none;">
     <div class="kpi" style="cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">✅</div><div class="n tnum" style="color:var(--green)">{{ stats.done }}</div><div class="l">Approved / resolved</div></div>
+    </a>
+    <a href="{{ url_for('detail') }}?status=rejected" style="text-decoration:none;">
+    <div class="kpi" style="cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">🚫</div><div class="n tnum" style="color:var(--gray)">{{ stats.rejected }}</div><div class="l">Ineligible ITC (rejected)</div></div>
     </a>
 </div>
 
