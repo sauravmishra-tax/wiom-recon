@@ -3044,32 +3044,35 @@ def bulk_remark_upload():
         reason_col = headers.index('NEW_REASON')
     except ValueError:
         return jsonify({'error': 'Missing columns: row_id, NEW_REMARK, NEW_REASON. Download the template first.'}), 400
-    updated = skipped = 0
+    updated = 0
+    skip_reasons = {'no_remark_or_reason': 0, 'row_not_found': 0, 'no_permission': 0}
     for data_row in ws.iter_rows(min_row=2, values_only=True):
         row_id = data_row[id_col]
         new_remark = str(data_row[remark_col] or '').strip()
         new_reason = str(data_row[reason_col] or '').strip()
-        if not row_id or not new_remark:
-            skipped += 1
+        if not row_id or (not new_remark and not new_reason):
+            skip_reasons['no_remark_or_reason'] += 1
             continue
         row = db.session.get(ReconRow, int(row_id))
         if not row:
-            skipped += 1
+            skip_reasons['row_not_found'] += 1
             continue
         if not current_user.is_admin and not current_user.can_see_state(row.state_name):
-            skipped += 1
+            skip_reasons['no_permission'] += 1
             continue
-        row.team_remark = new_remark
+        if new_remark:
+            row.team_remark = new_remark
         if new_reason:
             row.team_reason = new_reason
         if row.status == 'open':
             row.status = 'remarked'
         row.remarked_by_id = current_user.id
         row.remarked_at = now_ist()
-        log_audit(row.id, current_user, 'remark', 'bulk_excel', '', new_remark)
+        log_audit(row.id, current_user, 'remark', 'bulk_excel', '', new_remark or new_reason)
         updated += 1
     db.session.commit()
-    return jsonify({'ok': True, 'updated': updated, 'skipped': skipped})
+    skipped = sum(skip_reasons.values())
+    return jsonify({'ok': True, 'updated': updated, 'skipped': skipped, 'skip_reasons': skip_reasons})
 
 
 # ---- Feature: CFO PDF (print-ready redirect) ----

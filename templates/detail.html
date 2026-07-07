@@ -1004,10 +1004,20 @@ function dlBulkTemplate(){
 function uploadBulkRemarks(input){
     const file=input.files[0]; if(!file) return;
     const fd=new FormData(); fd.append('file',file);
+    toast('⏳ Uploading '+file.name+'… processing, please wait','warn',60000);
     fetch('/api/bulk-remark/upload',{method:'POST',body:fd})
     .then(r=>r.json()).then(d=>{
         if(d.error){toast('Error: '+d.error,'error');return;}
-        toast('Done! Updated: '+d.updated+' rows, Skipped: '+d.skipped,'success',5000);
+        let msg='✓ Updated: '+d.updated+' rows, Skipped: '+d.skipped;
+        if(d.skipped>0&&d.skip_reasons){
+            const sr=d.skip_reasons;
+            const parts=[];
+            if(sr.no_remark_or_reason)parts.push(sr.no_remark_or_reason+' had no remark/reason filled in');
+            if(sr.row_not_found)parts.push(sr.row_not_found+' row_id not found (wrong/edited template)');
+            if(sr.no_permission)parts.push(sr.no_permission+' outside your assigned states');
+            if(parts.length)msg+=' — '+parts.join('; ');
+        }
+        toast(msg,'success',8000);
         reloadAll();
     }).catch(e=>toast('Upload failed: '+e.message,'error'));
     input.value='';
