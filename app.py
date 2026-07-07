@@ -401,6 +401,10 @@ def run_reconciliation(file_path, period, label, user_id, run_state=None):
                 db.session.commit()
             except Exception as persist_err:
                 db.session.rollback()
+                # persist_run may have partially committed rows tied to this
+                # run before failing — delete them first or the FK constraint
+                # blocks deleting the run itself.
+                ReconRow.query.filter_by(run_id=run.id).delete()
                 ReconRun.query.filter_by(id=run.id).delete()
                 db.session.commit()
                 raise persist_err
