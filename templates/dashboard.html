@@ -312,7 +312,7 @@
     <div class="kpi" style="cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">✅</div><div class="n tnum" style="color:var(--green)">{{ stats.done }}</div><div class="l">Approved / resolved</div></div>
     </a>
     <a href="{{ url_for('detail') }}?status=rejected" style="text-decoration:none;">
-    <div class="kpi" style="cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">🚫</div><div class="n tnum" style="color:var(--gray)">{{ stats.rejected }}</div><div class="l">Ineligible ITC (rejected)</div></div>
+    <div class="kpi" style="cursor:pointer;transition:.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"><div class="ic">🚫</div><div class="n tnum" style="color:var(--gray)">{{ stats.rejected }}</div><div class="l">ITC Ineligible</div></div>
     </a>
 </div>
 
