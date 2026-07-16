@@ -124,7 +124,8 @@ def _start_scheduler(app):
             for admin in admins:
                 try:
                     from email_util import send_email
-                    send_email(admin.email, f'[WIOM Recon] {stale} rows pending approval (3+ days)',
+                    send_email(_smtp_cfg(), admin.email,
+                               f'[WIOM Recon] {stale} rows pending approval (3+ days)',
                                f'<p>{stale} remarked rows are waiting for approval for 3+ days.</p>'
                                f'<p><a href="https://web-production-bf681c.up.railway.app/detail">Review now →</a></p>')
                 except Exception as e:
@@ -1152,11 +1153,23 @@ def _zoho_configured():
 
 zoho_sync_state = {'active': False, 'phase': '', 'page': 0, 'vendors_so_far': 0,
                     'done': False, 'ok': None, 'error': None, 'result': None}
+_zoho_sync_lock = threading.Lock()
 
 
 def sync_zoho_master(progress_cb=None):
     """Fetch vendors from Zoho Books -> upsert VendorMaster + backfill row names.
-    Returns dict {ok, count, updated_rows, error}."""
+    Returns dict {ok, count, updated_rows, error}.
+    Serialized with a lock — two concurrent syncs upserting the same
+    VendorMaster rows out of order causes Postgres deadlocks."""
+    if not _zoho_sync_lock.acquire(blocking=False):
+        return {'ok': False, 'error': 'A Zoho sync is already running — skipped this one.'}
+    try:
+        return _sync_zoho_master_locked(progress_cb)
+    finally:
+        _zoho_sync_lock.release()
+
+
+def _sync_zoho_master_locked(progress_cb=None):
     c = _zoho_creds()
     try:
         if progress_cb:
