@@ -3182,7 +3182,9 @@ def import_remarks():
 
 # ---- Feature 9: CFO one-page executive summary (print → PDF) ----
 def _cfo_context(rows, state):
-    gap = gap_from_rows(rows)
+    # Top-10 gap/risk vendor list should not include invoices already marked
+    # ITC Ineligible (rejected) — they're no longer a real recovery risk.
+    gap = gap_from_rows([r for r in rows if r.status != 'rejected'])
     def tax(r, side):
         if side == 'b':
             return (r.books_igst or 0) + (r.books_cgst or 0) + (r.books_sgst or 0)
